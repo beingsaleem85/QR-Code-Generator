@@ -100,3 +100,35 @@ Known issues:
 Next:
 
 - Module 1.4 — Supabase Database Architecture
+
+## Module 1.4 — Supabase Database Architecture
+
+Status: COMPLETE
+
+Completed:
+
+- Wrote 6 deterministic SQL migrations under `supabase/migrations/`: extensions/shared trigger function, `profiles`, `qr_folders`, `qr_codes`, `qr_scan_events`, `qr_assets`.
+- `qr_codes` centralizes static and dynamic codes: `mode`/`qr_type`/`status` check constraints (the `qr_type` value list is kept in sync with `src/types/qr.ts`'s `QRType` union), a partial unique index on `slug` (null allowed for static codes), and a check constraint requiring a slug whenever `mode = 'dynamic'`.
+- `qr_scan_events` intentionally has no raw-IP or raw-User-Agent column — stricter than the master prompt's "nullable or privacy-minimized" suggestion — only derived fields (`country_code`, `device_type`, `os`, `browser`, etc.) and an optional `ip_hash`.
+- Chose delete behavior deliberately per relationship: `auth.users → {profiles, qr_folders, qr_codes, qr_assets}` = cascade; `qr_codes → qr_scan_events` = cascade; `qr_folders → qr_codes.folder_id` = set null; `qr_codes → qr_assets.qr_code_id` = set null.
+- Enabled RLS (default-deny, zero policies) on every table now, ahead of writing the actual policies in Module 1.5.
+- Documented the full schema, indexes, and delete-behavior rationale in `docs/ARCHITECTURE.md` under "Database Schema".
+
+Verification — validated against a real local Postgres instance, not just read by eye:
+
+- Ran a local Supabase stack via `supabase init` + `supabase start` on Docker (fully local/offline — no hosted project, no credentials). First attempt failed on a transient DNS resolution error pulling `storage-api` from `public.ecr.aws` (`no such host`); confirmed DNS actually resolved fine moments later and retried — the retry succeeded using cached layers for the already-pulled images.
+- `\dt public.*` confirmed all 5 tables exist; `\d` on each confirmed every column, check constraint, foreign key, index, and trigger matches the migration source exactly.
+- Functional tests via `docker exec ... psql`: inserted a static QR (no slug) and a dynamic QR (with slug) successfully; confirmed rejections for (a) a dynamic QR with no slug, (b) an invalid `qr_type`, (c) a duplicate slug; confirmed the `updated_at` trigger bumps on `UPDATE`.
+- Delete-cascade tests: deleting a `qr_folders` row set the referencing `qr_codes.folder_id` to null (code survived); deleting a `qr_codes` row cascade-deleted its `qr_scan_events` and set the referencing `qr_assets.qr_code_id` to null; deleting the owning `auth.users` row cascade-deleted its `profiles`/`qr_codes`/`qr_assets` rows.
+- Ran `supabase db reset` (drops and recreates from migrations + `seed.sql` only) to confirm the migrations are deterministic end-to-end; all 6 applied cleanly in order, all 5 tables recreated empty.
+- Stopped the local stack (`supabase stop`) afterward — data persisted in a Docker volume, not required to keep running between sessions.
+
+Known issues:
+
+- The `supabase_vector_QR` (analytics/log shipping) container repeatedly restarted during startup — a known Supabase-CLI-on-Windows limitation ("Analytics on Windows requires Docker daemon exposed on tcp://localhost:2375"), unrelated to the schema and with no effect on the database or migrations.
+- `supabase init` added `supabase/config.toml` and `supabase/.gitignore` (the latter already correctly excludes `.branches`/`.temp`); these are local-dev-only config, not secrets.
+- No RLS policies yet — intentionally deferred to Module 1.5.
+
+Next:
+
+- Module 1.5 — Supabase Auth, Storage, and RLS Design

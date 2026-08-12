@@ -163,7 +163,43 @@ Unit tests live under `tests/unit/qr/`, run via Vitest (`npm run test`). Every i
 
 ## Database Schema
 
-TBD — Module 1.4.
+Established in Module 1.4 as migrations under `supabase/migrations/` (schema design only — no live Supabase project exists yet; validated locally via `supabase start` on Docker, not against a hosted project).
+
+### Tables
+
+**`profiles`** — one row per authenticated user (`id` = `auth.users.id`, cascade-deleted with the auth user). `display_name`, `avatar_url`, timestamps. `updated_at` auto-maintained by the shared `set_updated_at()` trigger.
+
+**`qr_folders`** — optional single-level organization. `user_id`, `name` (unique per user), `created_at`. A single level (no folder hierarchy, no many-to-many join table) was chosen over a full tree since the master prompt explicitly calls for "the simpler structure appropriate for one-folder vs multi-folder organization" and the MVP only needs one.
+
+**`qr_codes`** — the core record, shared by static and dynamic codes:
+
+- `mode` (`static`/`dynamic`) and `qr_type` (one of the 20 `QRType` values — the check constraint's value list **must stay in sync with `src/types/qr.ts`**)
+- `status` (`active`/`paused`/`archived`)
+- `payload_data` and `design_config` — JSONB, versionable, never contain secrets
+- `destination_url` — the current redirect target, dynamic codes only
+- `landing_page_config` — JSONB, null until a hosted-landing-page type (Module 3.9) is attached
+- `slug` — nullable (static codes don't need one), but **unique when present** via a partial unique index; a check constraint enforces that every `dynamic` row has a non-null slug
+- `folder_id` → `qr_folders`, `on delete set null` (deleting a folder must not delete its QR codes)
+- Indexes: `user_id`, `created_at`, `folder_id`, plus the partial unique index on `slug`
+
+**`qr_scan_events`** — one row per dynamic-QR scan. Deliberately **omits raw IP and raw User-Agent columns entirely** (stricter than the master prompt's "nullable or privacy-minimized" suggestion) — only derived fields exist: `country_code`, `region`, `city`, `device_type`, `os`, `browser`, `referrer`, and an optional `ip_hash` (salted/hashed, populated only if a documented product/legal need arises). The application layer must derive these before insert; there is no column to accidentally store the raw values in. Indexes: `qr_code_id`, `scanned_at`, and a compound `(qr_code_id, scanned_at)` for the analytics queries in Module 3.7.
+
+**`qr_assets`** — metadata for Supabase Storage uploads (logos, PDFs, gallery images, audio). The file itself lives in Storage; this row tracks `bucket` + `path` (unique together), `mime_type`, `size_bytes`, and an optional `qr_code_id` link (`on delete set null`, since an asset can outlive the QR code that first referenced it — e.g. a logo reused across codes).
+
+### Delete behavior (consciously chosen, not default)
+
+- `auth.users` → `profiles`/`qr_folders`/`qr_codes`/`qr_assets`: `cascade` — a deleted auth user's owned rows are deleted with them.
+- `qr_codes` → `qr_scan_events`: `cascade` — scan history has no meaning without its QR code.
+- `qr_folders` → `qr_codes.folder_id`: `set null` — deleting a folder must not delete the codes in it.
+- `qr_codes` → `qr_assets.qr_code_id`: `set null` — an asset (e.g. a logo) can outlive the specific code it was first attached to.
+
+### RLS status
+
+Every table has `alter table ... enable row level security;` in its creation migration (default-deny, per Supabase convention: enabling RLS before any policy exists blocks all access rather than leaving the table open). **No policies exist yet** — writing them is explicitly Module 1.5's job, not this one.
+
+### Local validation
+
+Migrations were applied to a local, Docker-only Postgres instance via `supabase start` / `supabase db reset` to confirm they run cleanly and in order — no live/hosted Supabase project or credentials were involved. See `docs/WORKLOG.md` Module 1.4 for the exact commands and result.
 
 ## Auth, Storage, and RLS
 
