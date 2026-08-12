@@ -132,3 +132,33 @@ Known issues:
 Next:
 
 - Module 1.5 — Supabase Auth, Storage, and RLS Design
+
+## Module 1.5 — Supabase Auth, Storage, and RLS Design
+
+Status: COMPLETE
+
+Completed:
+
+- Wrote owner-only RLS policies for `profiles`, `qr_folders`, `qr_codes`, and `qr_assets` (`auth.uid() = user_id`/`= id` for select/insert/update/delete) in a new migration.
+- Deliberately did **not** give `qr_codes` an `anon` SELECT policy and did **not** give `qr_scan_events` any INSERT/UPDATE/DELETE policy for any client role — both are documented design decisions (public redirect resolution and scan-event writes must go through a privileged server-side path in Module 3.6/3.7, never a client-facing RLS grant) rather than oversights.
+- Designed 5 Storage buckets (`avatars` public, `qr-logos`/`qr-documents`/`qr-gallery`/`qr-media` private) with per-bucket `allowed_mime_types` and `file_size_limit`, plus a `{user_id}/...` path convention enforced by `storage.objects` RLS policies via `(storage.foldername(name))[1] = auth.uid()::text`.
+- Documented server vs. client Supabase responsibilities (browser client, server client, `server/repositories`, `server/actions`, service-role key scope) in `docs/ARCHITECTURE.md`.
+
+Verification — validated against the same local Docker-only Supabase stack used in Module 1.4 (still no live/hosted project or credentials):
+
+- `supabase db reset` applied all 8 migrations (the original 6 plus this module's 2) cleanly and in order.
+- Confirmed via `pg_policies` that exactly the intended policies exist: 17 on the 5 tables (4 each on `profiles`/`qr_folders`/`qr_codes`/`qr_assets`, 1 on `qr_scan_events`) and 20 on `storage.objects` (4 per private bucket × 4 buckets, plus 4 for `avatars`); confirmed the 5 buckets have the correct `public`/size/MIME-type config.
+- **Cross-user access test:** seeded two users (Alice, Bob) each with their own `qr_codes` row and a `qr_scan_events` row. As Alice (`set role authenticated; set request.jwt.claim.sub = '<alice-id>'`): she saw only her own `qr_codes`/`profiles`/`qr_scan_events` row (not Bob's); an `UPDATE` targeting Bob's QR code affected 0 rows; an `INSERT` attempting to spoof `user_id = bob` was rejected by the RLS `WITH CHECK` clause.
+- **Anon-role test:** `set role anon` returned 0 rows from every one of the 5 tables, and a direct `INSERT` into `qr_scan_events` (simulating an attacker hitting the table directly rather than through the intended server path) was rejected — confirming the "no client-facing insert" design actually holds at the database level, not just in a code comment.
+- **Storage policy test:** as Alice, an insert into `storage.objects` under her own `{user_id}/...` folder in a private bucket succeeded; the same insert under Bob's folder was rejected; `anon` saw 0 rows querying a private bucket's objects but _did_ see a row in the public `avatars` bucket once one existed — confirming the public/private split works as designed.
+- Reset to a clean state and ran `supabase stop` afterward.
+- App-level checks unaffected by this module (no application code changed): `typecheck`, `lint`, `format:check`, `test` (41/41), and `build` all still pass.
+
+Known issues:
+
+- No RLS test exists yet for the `service_role` bypass path itself (trivially true by Postgres/Supabase design — service role bypasses RLS entirely — but not exercised here since no server code calls Supabase yet).
+- Auth is still not wired into the app (Module 3.1). These policies are correct and tested at the database level but have no application code depending on them yet.
+
+Next:
+
+- Module 1.6 — Structural Component Architecture

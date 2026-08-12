@@ -203,7 +203,44 @@ Migrations were applied to a local, Docker-only Postgres instance via `supabase 
 
 ## Auth, Storage, and RLS
 
-TBD — Module 1.5.
+Established in Module 1.5 (design only — no live Supabase project exists yet; validated locally via Docker, same as Module 1.4). Actual auth wiring (signup/login/session handling) is Module 3.1.
+
+### RLS policies (`supabase/migrations/20260813010001_add_table_rls_policies.sql`)
+
+Straightforward owner-only CRUD (`auth.uid() = user_id`, or `= id` for `profiles`) on `profiles`, `qr_folders`, `qr_codes`, and `qr_assets`. Two tables are deliberately **not** given the obvious policy set:
+
+- **`qr_codes` has no `anon` SELECT policy.** Per the master build prompt (§7): "Do not open unrestricted public SELECT access to full `qr_codes` rows merely to support redirects." The public `/r/[slug]` and `/p/[slug]` routes must not read this table through a client-facing RLS policy at all — Module 3.6 resolves slugs through a privileged server-side path instead (the Supabase **service-role key**, which bypasses RLS entirely, or a narrow `SECURITY DEFINER` RPC function returning only the fields a redirect needs). This is a schema/RLS design decision made now so Module 3.6 isn't tempted to bolt on a broad `anon` policy later for convenience.
+- **`qr_scan_events` has only a SELECT policy** (owner reads their own QR codes' scan history via a join on `qr_codes.user_id`, since the table itself has no `user_id` column). There is **no INSERT/UPDATE/DELETE policy for any client role** — a scanning visitor must never get direct table-level INSERT rights (that would let an attacker insert arbitrary `qr_code_id`s or forged event data into someone else's analytics), and the owner must not be able to edit their own scan history (that would let them falsify analytics). Module 3.7's redirect route writes scan events through the same privileged server-side path used for redirect resolution — it resolves the slug and attaches the `qr_code_id` internally rather than trusting client input, per master build prompt §7.
+
+### Storage buckets (`supabase/migrations/20260813010002_create_storage_buckets.sql`)
+
+| Bucket         | Public? | Allowed types          | Size limit | Used by                |
+| -------------- | ------- | ---------------------- | ---------- | ---------------------- |
+| `avatars`      | Yes     | png/jpeg/webp          | 5 MB       | Profile avatars        |
+| `qr-logos`     | No      | png/jpeg/svg/webp      | 2 MB       | QR design logo uploads |
+| `qr-documents` | No      | pdf                    | 20 MB      | PDF QR type            |
+| `qr-gallery`   | No      | png/jpeg/webp/gif      | 10 MB      | Image gallery QR type  |
+| `qr-media`     | No      | mpeg/mp4/wav/ogg audio | 15 MB      | Audio/MP3 QR type      |
+
+`avatars` is the one bucket made public — profile pictures are displayed constantly across the UI and have no sensitive content, so serving a bare public URL avoids refreshing a signed URL on every render. Every other bucket is private: content should only be reachable through an owner action (dashboard) or a server-mediated flow (a signed URL, or the landing-page/redirect route), never a bare public URL — per master build prompt §1.5 ("Prefer private buckets... use signed URLs or controlled server delivery when necessary"). There is intentionally no bucket for video — per §3.8, self-hosting video is avoided in favor of linking an external host (YouTube/Vimeo/etc.).
+
+**Path convention:** every object lives at `{user_id}/{qr_code_id_or_asset_id}/{sanitized_filename}`. The leading `{user_id}` segment is what the `storage.objects` RLS policies check against `auth.uid()` via `(storage.foldername(name))[1]` — user isolation is enforced by Postgres, not by client code choosing "nice" paths. File-type and size limits are enforced by Supabase Storage itself via each bucket's `allowed_mime_types`/`file_size_limit`, not just client-side validation.
+
+### Server vs. client Supabase responsibilities
+
+- **Browser client** (`src/lib/supabase/client.ts`, added in Module 3.1): only ever uses the anon/publishable key. Fine for anything RLS already protects correctly — the user's own dashboard reads/writes, uploading to their own Storage folder, auth state.
+- **Server client** (`src/lib/supabase/server.ts`, added in Module 3.1): still the anon key by default (RLS-protected, but running in a trusted request context — Server Components/Actions), used for most authenticated server-side reads/writes.
+- **`server/repositories`**: the only place that talks to Supabase directly (browser or server client). No component or Server Action queries Supabase ad hoc.
+- **`server/actions`**: Next.js Server Actions that call into `server/repositories`; this is where server-side authorization re-checks belong (never trust a client-provided `user_id` — always derive it from the authenticated session), per master build prompt §12.
+- **Service-role key**: server-only, never bundled into client code, used only for the narrow set of operations that must bypass RLS by design — resolving `/r/[slug]` redirects, writing `qr_scan_events`, and any admin/cron-style task. These are exactly the two policy gaps called out above.
+
+### Acceptance status
+
+- [x] RLS policies are explicit (see migration above)
+- [x] Storage policy is explicit (bucket config + `storage.objects` policies above)
+- [x] Server/client Supabase responsibilities documented (this section)
+- [x] Privileged key usage is server-only (service-role key never referenced from client code; not even introduced yet)
+- [x] No public policy accidentally grants access to all user data (validated locally — see `docs/WORKLOG.md` Module 1.5)
 
 ## Component Architecture
 
