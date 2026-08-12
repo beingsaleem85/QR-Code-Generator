@@ -36,3 +36,36 @@ Known issues:
 Next:
 
 - Module 1.2 — Route and Information Architecture
+
+## Module 1.2 — Route and Information Architecture
+
+Status: COMPLETE
+
+Completed:
+
+- Created the public route skeleton under a `(marketing)` route group: `/`, `/qr-generator`, `/qr-types`, `/static-qr`, `/dynamic-qr`, `/features`, `/pricing`, `/faq`. Moved the existing homepage into `(marketing)/page.tsx`.
+- Created the `(auth)` route group: `/login`, `/signup`, `/forgot-password`.
+- Created the `(dashboard)` route group: `/dashboard`, `/dashboard/qr-codes`, `/dashboard/qr-codes/new`, `/dashboard/qr-codes/[id]`, `/dashboard/qr-codes/[id]/edit`, `/dashboard/qr-codes/[id]/analytics`, `/dashboard/files`, `/dashboard/account`, `/dashboard/settings`.
+- Created `src/app/r/[slug]/route.ts` — a Route Handler (not a page) that resolves a slug via a typed `resolveDynamicQrRedirect` contract (`src/server/services/redirect-resolution.ts`) and either redirects or returns a 404 JSON stub. The contract is fully typed now; Module 3.6 fills in the real Supabase lookup without changing the route shape.
+- Created `src/app/p/[slug]/page.tsx` for hosted landing pages (real page, not a redirect — kept on a separate route tree from `/r/[slug]` so dynamic-QR redirect latency never depends on landing-page render cost).
+- Added a shared `RouteStub` component (`src/components/layout/RouteStub.tsx`) so all 20 placeholder pages stay trivial and consistent, and are easy to replace one-by-one in Phase 2.
+- Documented the full route map and the protected-route strategy (a future `proxy.ts`, not `middleware.ts` — renamed in Next 16 — plus mandatory server-side re-checks) in `docs/ARCHITECTURE.md` under "Route Architecture".
+- Regenerated stale Next.js route types (`npx next typegen`) after moving `page.tsx` into the `(marketing)` group.
+
+Verification:
+
+- `npm run typecheck` — pass
+- `npm run lint` — pass
+- `npm run format:check` — pass
+- `npm run build` — pass; all 21 routes compiled (17 static, 4 dynamic: `/api/health`, the three `[id]`/`[slug]` routes, and `/r/[slug]`)
+- Dev server smoke test: all 20 page routes return 200; `/r/[slug]` returns 404 with `{"error":"not_found"}` (correct — no real dynamic-QR data source exists yet, and the route must never claim an unresolved slug is valid)
+- Dev server stopped cleanly after verification
+
+Known issues:
+
+- `(dashboard)` routes are not yet access-controlled (no auth exists until Module 1.5/3.1) — this is expected per the module scope, not a defect.
+- All changes for this module are staged for commit alongside this worklog entry.
+
+Next:
+
+- Module 1.3 — QR Domain Model and Type System
