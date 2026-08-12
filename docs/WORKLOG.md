@@ -337,3 +337,32 @@ Known issues:
 Next:
 
 - Module 2.4 — QR Generator UI
+
+## Module 2.4 — QR Generator UI
+
+Status: COMPLETE
+
+Completed:
+
+- Installed `lucide-react` (v1.31.0) and built `qr-type-icons.tsx` mapping the registry's `icon` string keys to real icon components; `QRTypeSelector` now shows icon + label + tooltip per option.
+- Installed `react-hook-form` + `@hookform/resolvers/zod` and built 9 real content forms (one per implemented `QRType`) under `src/components/qr/content-forms/`, using the existing Module 1.3 Zod schemas for genuine inline validation. `sms`/`whatsapp` share a `PhoneMessageFields` component (identical schema shape). `CONTENT_FORMS` maps type → form; the other 11 types fall back to an explanatory placeholder.
+- Added `Input`/`Textarea`/`Select`/`FormField` primitives under `src/components/ui/` to support the forms.
+- Replaced the 5 `Design*Controls` placeholders with real inputs (color pickers, selects, range slider, checkboxes) inside a new `AccordionItem` primitive built on native `<details>`/`<summary>`.
+- Polished `QRPreviewPanel` (empty vs. filled state) and `QRGeneratorShell` (working Reset button; mode-switch now falls back to a supported type instead of leaving a stale unsupported selection).
+
+Verification:
+
+- `npm run typecheck` / `lint` (0 errors, 8 informational React-Compiler-compatibility warnings on the RHF `watch()` pattern — expected, non-blocking, confirmed exit code 0) / `format:check` — all pass
+- `rm -rf .next && npm run build` — pass, 23 routes unchanged
+- **Manual browser verification hit a real obstacle this module**: clicking type-selector/mode-toggle buttons in this session's Browser pane produced no visible state change, with zero console errors. Extensive live debugging (documented in full in `docs/ARCHITECTURE.md` under "QR Generator UI") — checking React fiber attachment via `Object.getOwnPropertyNames`/`getOwnPropertySymbols`, native event bubbling, script/chunk load status, duplicate-React checks, dev vs. prod, multiple fresh tabs — found no code-level cause and pointed to a session-level Browser-pane issue (compounding the already-documented compositing limitation from Module 2.3), not an app bug.
+- **Resolved definitively rather than left ambiguous**: added `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`, `jsdom` as dev dependencies (fixed `vitest.config.mts`'s `include` pattern, which only matched `.test.ts` and was silently excluding the new `.test.tsx` file — caught because the total test count didn't increase after adding the file, not assumed correct). Wrote `tests/unit/components/QRGeneratorShell.test.tsx` — 5 tests exercising type selection, mode-based filtering, Reset, and blur-validation through React's real event system in `jsdom`, independent of the Browser pane. **All 5 pass** (46/46 total suite), conclusively proving the component logic is correct.
+- Test suite: 46/46 passing (41 payload-builder/registry tests + 5 new component interaction tests).
+
+Known issues:
+
+- The Browser pane's interaction-testing reliability in this session remains unresolved/unexplained at the tooling level — documented as a standing caution for future modules, with component tests established as the reliable fallback. Content/structure checks via `textContent`/`getComputedStyle` (not full interaction) remain trustworthy per Module 2.3.
+- Save/Download buttons remain intentionally disabled (Module 3.4/3.5); logo upload is a disabled file input (Module 3.8); no real QR rendering yet (Module 3.3) — all expected, not defects.
+
+Next:
+
+- Module 2.5 — Authentication UI

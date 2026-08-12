@@ -1,6 +1,6 @@
 # Architecture
 
-Status: Phase 2 — UI, Module 2.2. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
+Status: Phase 2 — UI, Module 2.4. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
 
 ## Stack
 
@@ -381,3 +381,36 @@ What **is** reliable without a layout pass, confirmed by cross-checking known va
 - [x] Good mobile hierarchy (confirmed via breakpoint-matching: hero padding/type scale/CTA stacking all resolve correctly at 375px)
 - [x] No overly tall empty hero (content-driven height only — no forced `min-height`, no decorative filler; can't be measured in pixels this session, but structurally there is nothing that would inflate it)
 - [x] Value understandable quickly (headline + one-sentence subhead + immediate CTA, no scrolling required to find the point of the product)
+
+## QR Generator UI (`/qr-generator`)
+
+Established in Module 2.4 — the master build prompt calls this "the most important product screen." This module restyles and substantially fleshes out the Module 1.6 `QRGeneratorShell` skeleton; the state model (shell-local state, no global store) is unchanged.
+
+### Icon-based type selector
+
+Added `lucide-react` (v1.31.0 — a major-version-bumped package, newer than most training data; verified all 20 icon export names actually exist in this version before relying on them, via a quick Node `require` check rather than assuming). `src/components/qr/qr-type-icons.tsx` maps each registry `icon` string key to a real `LucideIcon` component — the mapping is the _only_ place UI and domain layer meet; `src/types/qr.ts`/`src/lib/qr/registry.ts` still never import React or an icon library. `QRTypeSelector` renders icon + label + `title` tooltip per option, matching master prompt §2.4's "Icon, short label, selected state, tooltip" spec.
+
+### Real content forms (9 implemented types)
+
+Introduced `react-hook-form` + `@hookform/resolvers/zod` (compatibility with Zod v4 confirmed via `typecheck` before writing all 9 forms, not assumed) so the Module 1.3 Zod schemas now power real inline validation — labels, helper text, and inline errors, per master prompt §2.4's "Content Section" requirements. One form component per implemented type under `src/components/qr/content-forms/`; `sms`/`whatsapp` share a `PhoneMessageFields` internal component since their schemas are structurally identical (phone + optional message), avoiding duplicated JSX for two genuinely-identical field sets. `CONTENT_FORMS` (`content-forms/index.ts`) maps `QRType → form component` for the 9 implemented types only; `QRContentPanel` falls back to an explanatory `Placeholder` for the other 11 (which need Supabase Storage or a landing page before a form makes sense — see "QR Domain Model" above). Each form keeps its own `useForm` instance and pushes raw (possibly-invalid) values up to the shell via `watch(...)` + the existing `content`/`onChange` contract — form state and eventual persisted-record state remain distinct, per the state-ownership rule.
+
+### Working design accordion
+
+`src/components/ui/AccordionItem.tsx` uses the native `<details>`/`<summary>` element rather than a hand-rolled expand/collapse — keyboard toggling (Enter/Space on a focused `<summary>`) is free. The 5 `Design*Controls` components were upgraded from `Placeholder`s to real-looking inputs (color pickers, selects, a range slider, checkboxes) scoped to their `DesignConfig` slice — still not wired to actual QR rendering (Module 3.3), but no longer dashed boxes. Logo upload is a `disabled` file input with helper text explaining it activates once Storage exists (Module 3.8) — an honest disabled state rather than a fake-functional control.
+
+### Preview panel and shell polish
+
+`QRPreviewPanel` now distinguishes an empty state ("Enter content to preview your QR code") from a filled-but-not-yet-rendered state, based on whether any content field has a non-empty string value — still a static brand-motif placeholder, not real rendering. `QRGeneratorShell` gained a working **Reset** button (clears mode/type/name/content/design to defaults) and mode-change logic that falls back to the first type the new mode actually supports (fixing a latent Module 1.6 gap where switching mode could leave an unsupported type silently selected).
+
+### Verification note: this session's Browser pane and a definitive resolution
+
+Manual browser interaction testing in this session's Browser pane (both `next dev` and `next start`, multiple fresh tabs) showed clicks on `QRTypeSelector`/mode-toggle buttons _not_ changing visible state, with zero console errors and DOM `textContent`/`getComputedStyle` otherwise reading correctly. Deep investigation (native event bubbling confirmed working; React fiber/props confirmed attached to `<body>` but absent on every deeper node, including Module 2.2's previously-verified mobile-drawer trigger and even a bare `next/link`) pointed to a session-level Browser-pane/hydration issue **rather than an app bug** — but rather than leave that ambiguous, the question was settled definitively: `@testing-library/react` + `@testing-library/user-event` + `jsdom` were added, and `tests/unit/components/QRGeneratorShell.test.tsx` exercises the exact same interactions (type selection, mode switching, Reset, field-level validation-on-blur) through React's real event system in a real (if headless) DOM — no Browser pane involved. **All 5 tests pass**, which is conclusive: the component logic is correct. The Browser pane behavior in this session should be treated as unreliable for interaction testing going forward (content/structure checks via `textContent` and `getComputedStyle` remain trustworthy, as established in Module 2.3) — component tests are now the reliable fallback for interaction verification, and are worth adding for future modules with real interactive logic, not just as a last resort.
+
+### Acceptance status
+
+- [x] Generator visually complete (real forms, real accordion, polished preview/actions — no bare `Placeholder` boxes left except the 11 not-yet-implemented content types, which is intentional)
+- [x] All planned QR-type form states have UI (9 real forms; 11 explained placeholders, not silently blank)
+- [x] Design controls have UI (5 sections, real inputs, accordion)
+- [x] Preview state exists (empty vs. filled distinguished)
+- [x] Loading/error/empty states designed (inline field errors via RHF+Zod; preview empty state; disabled Save/Download until Phase 3 wires them)
+- [x] No backend completion required yet (validation is client-side/pure, already available since Module 1.3 — no Supabase, no rendering library, no persistence added)
