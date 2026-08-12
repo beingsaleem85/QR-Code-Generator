@@ -360,3 +360,24 @@ Four link groups (Product, QR Types, Resources, Company) plus a copyright line. 
 - [x] Mobile nav accessible (native focus trap + Escape via `<dialog>`; explicit close button; backdrop dismissal; ≥44px touch targets; verified live, not assumed)
 - [x] Footer responsive (2-column mobile / 4-column desktop grid, no horizontal overflow at 375px — verified via `scrollWidth` vs. `innerWidth`)
 - [x] All visible links point to a valid route from the Module 1.2 map or an intentionally added stub (`/privacy`, `/terms`) — none are dead
+
+## Home Page (`src/app/(marketing)/page.tsx`)
+
+Established in Module 2.3. 11 sections under `src/components/marketing/`, composed in `page.tsx` with no logic of its own (each section is a self-contained component — no giant page component). Original copy throughout, not the master build prompt's example hero text verbatim.
+
+`Hero` → `GeneratorTeaser` (a decorative mock, not the real interactive generator — reusing `QRGeneratorShell` here would duplicate live generation logic on two pages for no benefit; it links to `/qr-generator`) → `TrustStrip` → `StaticVsDynamic` → `FeatureCards` → `QrTypeGrid` → `HowItWorks` → `UseCases` → `AnalyticsPreview` (reuses `AnalyticsChartShell` from Module 1.6, tying the two phases together instead of building a second placeholder) → `FaqTeaser` → `CtaBanner`.
+
+`QrTypeGrid` reads `listQrTypeDefinitions()` directly from the Module 1.3 registry — the "supported types" list is never hand-duplicated; adding/removing a `QRType` updates this page automatically. Brand references introduced in Module 2.2 ("QRForge") were also applied to the root `<title>` for consistency.
+
+### A note on verification limits in this environment
+
+This session's Browser pane does not composite frames (`the Browser pane is not displayed, so the page is not compositing frames` — confirmed via repeated `screenshot` failures and by `getBoundingClientRect`/`offsetTop`/`scrollHeight` all returning degenerate values, e.g. a footer's `offsetTop` reporting `0`). This means **no layout-dependent geometry could be measured this session** — not just screenshots, but overflow checks and element-position checks too. This also retroactively means Module 2.2's "no horizontal overflow, verified via `scrollWidth`/`innerWidth`" claim was weaker evidence than stated: with layout not running, that check would report "no overflow" regardless of whether a real overflow bug existed. It wasn't a false claim about the _feature_ (the CSS itself is standard, reviewed Tailwind responsive utilities with no obvious overflow risk), but it overstated what the _check_ actually proved.
+
+What **is** reliable without a layout pass, confirmed by cross-checking known values against expected ones: `getComputedStyle` for CSS custom-property/cascade resolution (colors, `display`, resolved `@theme` tokens — this is how Module 2.1's contrast/token work was validated) and **breakpoint matching** specifically (a `sm:` media query either matches or it doesn't — independent of box layout). This module leaned on breakpoint-matching checks instead of geometry: confirmed `padding`/`font-size`/`flex-direction` on the hero switch correctly between 375px and 1280px viewports (e.g. `h1` font-size 36px → 48px, CTA row `column` → `row`), which is direct evidence the responsive classes are wired correctly even without pixel measurements. DOM content/structure (`textContent`, element counts, `href` values) and interactive behavior (`.click()`, resulting `window.location.pathname`) were also fully reliable and used throughout.
+
+### Acceptance status
+
+- [x] Clear first-screen action (hero has one primary CTA — "Create a QR Code" — confirmed to navigate correctly)
+- [x] Good mobile hierarchy (confirmed via breakpoint-matching: hero padding/type scale/CTA stacking all resolve correctly at 375px)
+- [x] No overly tall empty hero (content-driven height only — no forced `min-height`, no decorative filler; can't be measured in pixels this session, but structurally there is nothing that would inflate it)
+- [x] Value understandable quickly (headline + one-sentence subhead + immediate CTA, no scrolling required to find the point of the product)

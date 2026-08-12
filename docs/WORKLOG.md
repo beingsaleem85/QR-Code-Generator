@@ -305,3 +305,35 @@ Known issues:
 Next:
 
 - Module 2.3 — Home Page UI
+
+## Module 2.3 — Home Page UI
+
+Status: COMPLETE
+
+Completed:
+
+- Built the real homepage: 11 section components under `src/components/marketing/` (`Hero`, `GeneratorTeaser`, `TrustStrip`, `StaticVsDynamic`, `FeatureCards`, `QrTypeGrid`, `HowItWorks`, `UseCases`, `AnalyticsPreview`, `FaqTeaser`, `CtaBanner`) plus a shared `SectionHeading` helper, composed in `(marketing)/page.tsx` with zero page-level logic.
+- All copy is original — not the master prompt's example hero text.
+- `QrTypeGrid` reads `listQrTypeDefinitions()` straight from the Module 1.3 registry rather than hand-listing types; `AnalyticsPreview` reuses the Module 1.6 `AnalyticsChartShell` instead of building a second placeholder.
+- Updated the root `<title>` to include the "QRForge" brand introduced in Module 2.2, for consistency.
+
+Verification:
+
+- `npm run typecheck` / `lint` / `format:check` / `test` (41/41) — all pass
+- `rm -rf .next && npm run build` — pass, 23 routes unchanged in count (homepage content grew, route count didn't)
+- Confirmed via compiled CSS that the Tailwind v4 opacity-modifier utility used on the CTA banner (`text-primary-foreground/85`) generates a correct `color-mix()` rule
+- **Live browser verification**, with an important caveat discovered this module: this session's Browser pane does not composite frames, so `getBoundingClientRect`/`offsetTop`/`scrollHeight` all return degenerate/zero values (confirmed: a footer's `offsetTop` reported `0`). Screenshots fail outright for the same reason. This means pixel geometry could not be measured — adapted to methods that don't require a layout pass:
+  - DOM content (`textContent` on `main`/`footer`) confirmed every section renders with the intended copy, in order, end to end.
+  - Confirmed 22 links to `/qr-types` (20 registry-driven grid chips + hero secondary CTA + footer link) — proves the type grid is genuinely reading all 20 `QRType` entries, not a hardcoded subset.
+  - Confirmed responsive behavior via **breakpoint matching** (reliable without layout, since a media query either matches or doesn't) rather than pixel measurement: hero padding 64px→80px, `h1` font-size 36px→48px, CTA button row `column`→`row`, all switching correctly between 375px and 1280px.
+  - Confirmed the hero CTA link actually navigates (`window.location.pathname` → `/qr-generator`) after a `.click()`.
+  - Zero console errors throughout.
+  - **Retroactive note on Module 2.2**: its "no horizontal overflow, verified via scrollWidth/innerWidth" claim is now understood to be weaker evidence than stated — with layout not running in this session, that check would report "no overflow" regardless of whether a real bug existed. Not a false claim about the feature (the reviewed CSS has no obvious overflow risk), but an overstatement of what the check itself proved. Documented in `docs/ARCHITECTURE.md` under "Home Page" so it isn't silently repeated.
+
+Known issues:
+
+- Pixel-level visual verification (exact spacing, hero height in px, true overflow detection) was not possible in this session due to the Browser pane compositing limitation above. Everything that _could_ be verified without a layout pass was verified; a session where the pane does composite (or a manual check) would be needed to close this gap completely.
+
+Next:
+
+- Module 2.4 — QR Generator UI
