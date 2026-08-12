@@ -1,10 +1,9 @@
-import { RouteStub } from "@/components/layout/RouteStub";
+import { QRGeneratorShell } from "@/components/qr/QRGeneratorShell";
 
 export default function NewQrCodePage() {
   return (
-    <RouteStub
-      title="Create QR Code"
-      description="Saved-QR creation flow, reusing the generator UI from Module 2.4."
-    />
+    <div className="flex flex-col gap-4 p-4 sm:p-6">
+      <QRGeneratorShell />
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 # Architecture
 
-Status: Phase 2 — UI, Module 2.8. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
+Status: Phase 2 — UI, COMPLETE (Modules 2.1–2.10, gate passed). Starting Phase 3 — Features. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
 
 ## Stack
 
@@ -596,3 +596,14 @@ Three rows — default QR design, default download format, analytics privacy —
 - [x] Account: display name (editable), email (read-only), avatar, password/security entry point
 - [x] Files: file type, size, linked QR codes, upload state, delete action with confirmation
 - [x] Settings limited to settings that actually exist, no fake toggles (all controls visibly disabled with a note on what unlocks them)
+
+## UI Phase Audit (Module 2.10)
+
+The full findings, fixes, and reasoning live in `docs/WORKLOG.md`'s Module 2.10 entry (including the "UI Phase Completion Report" section) — this section only records what changed structurally as a result, so it doesn't go stale as a duplicate.
+
+- `/dashboard/qr-codes/new` now renders `QRGeneratorShell` directly (previously a `RouteStub` — a real gap, not an intentional deferral; every "Create QR" link in the dashboard was pointing at a placeholder).
+- `QRNameField` composes `FormField`+`Input` like every other form field in the app, instead of a bare, un-tokenized `<input>`.
+- `QRModeToggle`'s selected/unselected states now use the same token-based segmented-control styling as `AnalyticsFilters` (Module 2.8), instead of hardcoded `gray-*` classes.
+- `RouteStub`, `not-found.tsx`, `error.tsx`, `loading.tsx` migrated off pre-Module-2.1 raw colors onto tokens. `global-error.tsx` is a deliberate exception — it replaces the root layout (and therefore bypasses `layout.tsx`'s `globals.css` import), so it intentionally stays free of any dependency on the app's CSS pipeline, matching Next.js's own minimal example for this exact file.
+- `QRCodeTable` (QR codes list) and `AssetTable` (Files) desktop wrappers gained `overflow-x-auto` as a horizontal-overflow guard near the `md:` breakpoint.
+- The jsdom `<dialog>` polyfill introduced ad hoc in Module 2.9 (`FilesView.test.tsx`) is now `tests/setup.ts`, loaded globally via `vitest.config.mts`'s `setupFiles` (a no-op outside jsdom), and extended to dispatch the native `close` event so components that listen for it (`MobileNavDrawer`) behave correctly under test. `MobileNavDrawer` — previously untested for exactly this reason — now has real component test coverage.

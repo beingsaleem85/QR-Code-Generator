@@ -36,7 +36,7 @@ export default function QrCodesListPage() {
           />
         ) : (
           <>
-            <div className="hidden md:block">
+            <div className="hidden overflow-x-auto md:block">
               <QRCodeTable qrCodes={qrCodes} />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">

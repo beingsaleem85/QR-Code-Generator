@@ -7,16 +7,6 @@ import { FilesView } from "@/components/files/FilesView";
 import type { QrAsset } from "@/types/asset";
 import type { QRCodeSummary } from "@/types/qr-record";
 
-// jsdom doesn't implement <dialog>'s showModal()/close() (no "top layer"
-// support) — polyfill just enough of the open/close lifecycle for
-// DeleteAssetButton's confirmation dialog to be testable.
-HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
-  this.setAttribute("open", "");
-};
-HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
-  this.removeAttribute("open");
-};
-
 afterEach(() => cleanup());
 
 const QR_CODES: QRCodeSummary[] = [

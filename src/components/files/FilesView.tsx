@@ -38,7 +38,7 @@ export function FilesView({ initialAssets, qrCodes }: FilesViewProps) {
 
   return (
     <>
-      <div className="hidden md:block">
+      <div className="hidden overflow-x-auto md:block">
         <AssetTable assets={assets} qrCodesById={qrCodesById} onDelete={handleDelete} />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">

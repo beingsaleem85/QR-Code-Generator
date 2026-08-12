@@ -518,4 +518,58 @@ Known issues:
 
 Next:
 
-- Module 2.10 — UI Phase Completion Gate
+- Module 2.10 — Responsive and Accessibility UI Audit
+
+## Module 2.10 — Responsive and Accessibility UI Audit
+
+Status: COMPLETE — **PHASE 2 (UI) GATE PASSED**
+
+Audited every screen built across Modules 2.1–2.9 against the master prompt's checklist (navigation, generator, form labels, color controls, dialog focus trapping, keyboard use, sticky preview behavior, dashboard table overflow, chart readability, empty states, touch target sizes) by direct code review — component source, computed CSS token values, and the existing 88-test suite as evidence — rather than the Browser pane, per this session's established (and still valid) finding that it can't be trusted for layout/interaction verification here.
+
+### Real defects found and fixed (not just catalogued — the master prompt requires fixing before Phase 3)
+
+- **`/dashboard/qr-codes/new` was still the Module 1.1 `RouteStub`**, never wired to the real `QRGeneratorShell` — meaning every "Create QR" entry point in the dashboard (header action, Overview page, QR codes list page) led to a placeholder, not the actual generator. This fell through the cracks between Modules 2.6/2.7 (Module 2.6's known-issues note assigned it to "Modules 2.7/2.9," but neither module's own scope description actually claimed it). **This is the most important finding of this audit** — a broken primary user flow, not a cosmetic issue. Fixed by rendering `<QRGeneratorShell />` directly, the same pattern already used by the edit page.
+- **`QRNameField` and `QRModeToggle`** (both part of the generator, used on every generator page) were never migrated to the Module 2.1 design system — they used raw hardcoded `gray-300`/`gray-700`/`gray-900` Tailwind classes instead of the `border`/`foreground`/`muted-foreground`/`primary` tokens, and `QRNameField` used a bare `<input>` instead of the shared `FormField`/`Input` primitives. Fixed: `QRNameField` now composes `FormField`+`Input` like every other field in the app; `QRModeToggle`'s selected/unselected states now match the segmented-control pattern already established in `AnalyticsFilters` (Module 2.8).
+- **`RouteStub`, `not-found.tsx`, `error.tsx`, `loading.tsx`** also had raw `gray-*` classes left over from Module 1.1 (before the design system existed). `loading.tsx` in particular renders on effectively every route transition (it's the root Suspense boundary — see Module 2.7's `notFound()`/streaming finding), so its spinner color was visibly off-brand on every navigation. All four migrated to tokens.
+- **`global-error.tsx` deliberately left unchanged.** It replaces the entire root layout (including `layout.tsx`'s `import "./globals.css"`), so there's no guarantee the design tokens — or even Tailwind's compiled utility classes — are reliably available when it renders; Next.js's own documented example for this exact file uses zero CSS classes for the same reason. Matching that framework convention (minimal, dependency-free markup) is more defensible here than forcing token consistency onto the one file that exists specifically for when everything else has failed.
+- **Dashboard tables had no horizontal-overflow guard.** `QRCodeTable` (QR codes list) and `AssetTable` (Files) render inside a bare `hidden md:block` wrapper with no `overflow-x-auto` — a long file name or QR code name near the 768px breakpoint could overflow the layout instead of scrolling. Added `overflow-x-auto` to both wrappers (`src/app/(dashboard)/dashboard/qr-codes/page.tsx`, `src/components/files/FilesView.tsx`).
+
+### Reviewed and confirmed correct, no change needed
+
+- **Sticky preview** (`QRGeneratorShell`): `lg:sticky lg:top-20 lg:self-start`, gated to `lg:` where the two-column layout applies; confirmed no ancestor `overflow` rule in either the marketing or dashboard layout that would break `position: sticky`; `top-20` sits cleanly below the marketing `Header`'s `sticky top-0 h-16`.
+- **Dialog focus trapping** (`MobileNavDrawer`, `DeleteAssetButton`): both use native `<dialog>` + `showModal()`, which gives focus trapping and Escape-to-close for free per the HTML spec — already the deliberate reason this pattern was chosen (see `MobileNavDrawer`'s Module 2.2 code comment). Verified via new component tests (see below), not just re-read as a comment.
+- **Color controls** (`design-controls.tsx`): every `<input type="color">`/`type="range"`/`type="checkbox">` is a native, natively keyboard-operable control with a correctly associated `FormField` label (or valid implicit nested-label for checkboxes) — no custom widget reinventing keyboard behavior.
+- **Touch targets**: the `sm` Button size (`h-8` = 32px, an intentional Module 2.1 design token — see `--control-height-sm` in `globals.css`) clears WCAG 2.5.8's AA minimum (24×24px) on every usage found. It's below the 44px Apple HIG / 48px Material best-practice recommendation for a few primary CTAs (Header's "Create QR Code," dashboard "Create QR" links) — noted here as a minor, non-blocking density choice rather than changed, since Module 2.1's control-height scale was already its own reviewed, deliberate decision and the AA-binding minimum is met.
+- **Empty states**: QR codes list and Files list both have a real `EmptyState`; Analytics has two distinct empty states (true-zero vs. filtered-to-zero, Module 2.8). No list-type view is missing one.
+- **Chart readability**: `AnalyticsView`'s chart grid is single-column below `lg:`, `BarChart`'s bars are `flex-1` (no fixed width to overflow at narrow widths), `AnalyticsFilters` wraps via `flex-wrap`.
+- **`QRTypeSelector`'s ARIA pattern** (`role="listbox"`/`role="option"` with each `<button>` independently focusable) is a minor deviation from the full ARIA Authoring Practices listbox pattern (which expects roving `tabindex` + arrow-key navigation, with only the selected option in the tab sequence). Functionally every option is still reachable and operable via Tab+Enter today — nothing is broken or unreachable. Noted rather than rewritten: implementing full roving-tabindex across ~20 buttons is a real behavior change to a completed, tested Module 2.4 component, disproportionate to the marginal ARIA-purity gain, and risks destabilizing it right before Phase 3 for no functional benefit to a keyboard user.
+
+### Test coverage added
+
+- **`MobileNavDrawer`** (new, `tests/unit/components/MobileNavDrawer.test.tsx`, 4 tests) had no component test at all before this module — the reason turned out to be a real jsdom gap, not an oversight: `HTMLDialogElement.prototype.showModal`/`.close` are unimplemented in this project's jsdom version, confirmed in Module 2.9 via an actual failing test on `DeleteAssetButton`. That module's polyfill (scoped to one test file) is now promoted to `tests/setup.ts`, registered globally via `vitest.config.mts`'s `setupFiles` (guarded with `typeof HTMLDialogElement !== "undefined"` so it's a no-op for the many tests still running under the default `node` environment) — and extended to also dispatch the native `close` event, since `MobileNavDrawer` listens for it to sync its `open` state. `FilesView.test.tsx`'s now-redundant local copy was removed.
+- New tests cover: closed by default, opening shows every link + the CTA, closing via the close button, closing via clicking a nav link — the actual focus-trap/Escape behavior itself is native browser behavior with no app code to unit-test, verified by design (see above) rather than re-implemented in a test.
+
+### Verification
+
+- `npm run typecheck` / `lint` (0 errors, same 8 pre-existing informational warnings) / `format:check` — pass
+- `rm -rf .next && npm run build` — pass, all 25 routes build; `/dashboard/qr-codes/new` confirmed still a static route after being wired to a real (if unauthenticated-state-free) component
+- `npm run test` — 92/92 passing (4 new), confirmed stable across 2 consecutive full-suite runs
+- `curl` against the production server confirmed `/dashboard/qr-codes/new` now renders "Create a QR Code" / "QR name" (the real generator), not the old stub text
+
+### UI Phase Completion Report
+
+**1. Modules delivered.** 2.1 Visual Design System, 2.2 Public Header/Footer/Marketing Shell, 2.3 Home Page UI, 2.4 QR Generator UI, 2.5 Authentication UI, 2.6 Dashboard UI, 2.7 QR Detail and Edit UI, 2.8 Analytics UI, 2.9 Account/Files/Settings UI, 2.10 this audit — all 10 UI modules complete, each individually verified and committed in sequence per the module completion gate (implement → verify → document → commit) before the next began.
+
+**2. Screens now real** (not `RouteStub`s): the homepage; `/qr-generator`; all 3 auth forms + reset-password + auth callback; the full dashboard (`/dashboard` overview, QR codes list, create, detail, edit, analytics, account, files, settings). Still intentionally `RouteStub`s: `/features`, `/pricing`, `/faq`, `/qr-types`, `/static-qr`, `/dynamic-qr`, `/terms`, `/privacy`, `/p/[slug]` — none of these have a dedicated Phase 2 module in the master prompt (only the homepage, Module 2.3, does), so they remain out of scope, not a defect.
+
+**3. Design system.** One token set (`src/app/globals.css`, Module 2.1) applied consistently across every real screen as of this audit — the two components (`QRNameField`, `QRModeToggle`) and four app-level boundary files found still using pre-Module-2.1 raw colors are now migrated (see above); `global-error.tsx` is the one deliberate, reasoned exception.
+
+**4. Testing.** 92 unit/component tests (up from 41 at the end of Phase 1) covering QR payload builders/validation, every interactive form and generator flow, dashboard active-link logic, analytics aggregation and filtering, the unsaved-changes guard, the Files delete-confirmation flow, and now the mobile nav drawer. Established methodology: Vitest + Testing Library for anything interactive (the Browser pane cannot be trusted for interaction/geometry verification in this session — a finding from Module 2.4, held for the rest of the phase), `curl` against the production server for route-level content checks.
+
+**5. Known, accepted limitations carried into Phase 3** (all documented in `docs/ARCHITECTURE.md`, none blocking): `notFound()` returns HTTP 200 instead of 404 app-wide (root `loading.tsx` Suspense boundary + async `params`, Module 2.7); no "unique scans" analytics metric and no cross-QR-code analytics filter (schema/scope reasons, Module 2.8); Files delete is local-state-only until Storage integration (Module 3.8); every Account/Settings control beyond display-name editing is intentionally inert pending its respective Phase 3 module; `QRTypeSelector`'s ARIA listbox pattern is a minor, non-blocking deviation (this module).
+
+**6. Credential requirements for Phase 3.** None needed yet. The first point a live Supabase credential becomes necessary is Module 3.1 — request only the minimum value for what's being wired up first when that module actually begins, not before.
+
+### PHASE GATE: PASSED
+
+Phase 2 (UI) is complete and verified. Proceeding to **Phase 3 — Features**, starting with Module 3.1 (Supabase Connection and Authentication).

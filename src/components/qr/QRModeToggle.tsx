@@ -12,7 +12,7 @@ export function QRModeToggle({ mode, onModeChange }: QRModeToggleProps) {
     <div
       role="tablist"
       aria-label="QR mode"
-      className="inline-flex rounded-md border border-gray-300"
+      className="inline-flex rounded-md border border-border"
     >
       {(["static", "dynamic"] as const).map((option) => (
         <button
@@ -21,8 +21,10 @@ export function QRModeToggle({ mode, onModeChange }: QRModeToggleProps) {
           role="tab"
           aria-selected={mode === option}
           onClick={() => onModeChange(option)}
-          className={`px-3 py-1.5 text-sm capitalize ${
-            mode === option ? "bg-gray-900 text-white" : "text-gray-700"
+          className={`px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
+            mode === option
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
           }`}
         >
           {option}
