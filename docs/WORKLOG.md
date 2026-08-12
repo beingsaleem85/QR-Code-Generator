@@ -162,3 +162,36 @@ Known issues:
 Next:
 
 - Module 1.6 — Structural Component Architecture
+
+## Module 1.6 — Structural Component Architecture
+
+Status: COMPLETE
+
+Completed:
+
+- Built all 21 named component skeletons from the master prompt's list: 8 QR generator components (`QRGeneratorShell`, `QRTypeSelector`, `QRContentPanel`, `QRDesignPanel`, `QRPreviewPanel`, `QRDownloadActions`, `QRNameField`, `QRModeToggle`) + 5 design-control components (`design-controls.tsx`) under `src/components/qr/`; 6 dashboard components (`DashboardSidebar`, `DashboardHeader`, `QRCodeCard`, `QRCodeTable`, `QRCodeStatusBadge`, `EmptyState`) under `src/components/dashboard/`; 3 analytics components (`AnalyticsSummaryCards`, `AnalyticsChartShell`, `AnalyticsFilters`) under `src/components/analytics/`.
+- Added a shared `Placeholder` UI primitive (`src/components/ui/Placeholder.tsx`) so the ~20 structural skeletons don't duplicate the same filler markup.
+- Added `src/types/qr-design.ts` (`DesignConfig` + `DEFAULT_DESIGN_CONFIG`) and `src/types/qr-record.ts` (`QRCodeSummary`, `QRCodeStatus`) — the shapes the new components' props reference.
+- `QRTypeSelector` and `QRContentPanel` read directly from the Module 1.3 registry (`listQrTypeDefinitions`/`getQrTypeDefinition`), filtered by `staticSupport`/`dynamicSupport` — no hardcoded type list anywhere in the component tree.
+- `QRGeneratorShell` owns all generator state locally (`mode`, `qrType`, `name`, `content`, `design`) and composes the other 7 generator components from it — no global store, satisfying the Module 1.1 state-ownership rule.
+- Replaced the `/qr-generator` page's `RouteStub` with the real `QRGeneratorShell` composition, directly satisfying the "generator shell renders structurally" acceptance criterion.
+- Documented component responsibilities, form architecture, and the state-ownership rule (as applied to the actual component list) in `docs/ARCHITECTURE.md` under "Component Architecture".
+
+Verification:
+
+- `npm run typecheck` — pass
+- `npm run lint` — pass
+- `npm run format:check` — pass
+- `npm run test` — pass, 41/41 (unaffected by this module)
+- `npm run build` — pass; all 21 routes still compile, `/qr-generator` now renders the real shell
+- **Live browser verification** (dev server + Browser pane, not just a build check): loaded `/qr-generator`, confirmed 13 QR types shown in Static mode and exactly 12 in Dynamic mode (matching `staticSupport`/`dynamicSupport` counts in the registry), confirmed clicking a type updates `QRContentPanel`'s label (e.g. selecting "PDF" changed the panel to "PDF content"), confirmed the name field captures typed input, and confirmed zero browser console errors throughout.
+- Dev server stopped cleanly after verification.
+
+Known issues:
+
+- None blocking. Components are intentionally unstyled skeletons (Phase 2 replaces the visuals) and intentionally non-functional beyond local state (Phase 3 wires real behavior).
+- Dashboard/analytics components were built and typecheck/lint clean but are not yet wired into their pages (only the generator shell composition was required by this module's acceptance criteria) — wiring happens alongside their respective UI modules (2.6, 2.8).
+
+Next:
+
+- Module 1.7 — Structure Phase Verification

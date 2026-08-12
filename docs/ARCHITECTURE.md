@@ -244,7 +244,45 @@ Straightforward owner-only CRUD (`auth.uid() = user_id`, or `= id` for `profiles
 
 ## Component Architecture
 
-TBD — Module 1.6.
+Established in Module 1.6 — component contracts and neutral skeletons, no final visual styling (that's Phase 2) and no real behavior beyond local state (that's Phase 2 UI wiring + Phase 3 features).
+
+### QR generator (`src/components/qr/`)
+
+`QRGeneratorShell` owns all state locally (`mode`, `qrType`, `name`, `content`, `design`) and passes slices down — no global store, per the state-ownership rule above. Children:
+
+- `QRModeToggle`, `QRNameField` — top controls
+- `QRTypeSelector` — reads `listQrTypeDefinitions()` from the Module 1.3 registry and filters by `staticSupport`/`dynamicSupport` for the current mode, so the type list is never hardcoded and automatically reflects registry changes
+- `QRContentPanel` — resolves the selected type's label via `getQrTypeDefinition`; the real per-type form (driven by that same definition's `fields` Zod schema) is Module 2.4
+- `QRDesignPanel` — composes `DesignFrameControls`, `DesignPatternControls`, `DesignEyeControls`, `DesignColorControls`, `DesignLogoControls` (`design-controls.tsx`), each scoped to its slice of `DesignConfig` (`src/types/qr-design.ts`)
+- `QRPreviewPanel`, `QRDownloadActions` — sticky-column skeletons; real rendering is Module 3.3, real export/save is Module 3.4/3.5
+
+Verified structurally: the shell is wired into `/qr-generator` and confirmed in a live dev server to switch type lists correctly between modes (13 static-support types vs. 12 dynamic-support types, matching the registry), update the content panel label on type change, and accept name-field input — with zero console errors.
+
+### Dashboard (`src/components/dashboard/`)
+
+`DashboardSidebar` (nav items match the Module 1.2 route map — no dead links to routes that don't exist), `DashboardHeader`, `QRCodeCard`/`QRCodeTable` (two presentations of the same `QRCodeSummary` type, `src/types/qr-record.ts`, for card vs. table viewport strategies per §2.6), `QRCodeStatusBadge`, `EmptyState` (generic — reused wherever a list has zero results, not just the QR list).
+
+### Analytics (`src/components/analytics/`)
+
+`AnalyticsSummaryCards`, `AnalyticsChartShell` (a generic labeled container, not a chart library integration — that's Module 2.8), `AnalyticsFilters`.
+
+### Shared primitive
+
+`src/components/ui/Placeholder.tsx` — every skeleton component above renders through this internally rather than duplicating the same "dashed border + label + description" markup 20+ times. It's an implementation detail, not part of any component's public contract; Phase 2 replaces each usage with real content independently.
+
+### Form architecture (decided now, built out in Module 2.4)
+
+- The QR type registry (`qrTypeRegistry`) is the single source of truth mapping a `QRType` to its content-form schema (`fields`) — no component switches on `qrType` with its own hardcoded field list.
+- Form state (raw, possibly-invalid field values as the user types) is kept separate from persisted QR record state (`QRCodeSummary`/the eventual full record) — the shell's `content` state is the former, nothing here represents the latter yet.
+- Design state (`DesignConfig`) is one shape reused across every QR type, not type-specific.
+- Preview derives from validated form + design state; `previewUpdateStrategy` on each registry entry (`"immediate" | "debounced"`) already exists to drive which types need a debounced preview once real rendering lands.
+
+### Acceptance status
+
+- [x] Component responsibilities documented (this section)
+- [x] Generator shell renders structurally (verified live, see above)
+- [x] No giant monolithic builder component (`QRGeneratorShell` is ~50 lines of composition; every panel is its own component)
+- [x] State ownership is clear (shell-local state, no global store; see "State Ownership Rule" above)
 
 ## Error Handling Conventions
 

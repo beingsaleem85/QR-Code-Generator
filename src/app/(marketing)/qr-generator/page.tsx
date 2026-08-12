@@ -1,10 +1,9 @@
-import { RouteStub } from "@/components/layout/RouteStub";
+import { QRGeneratorShell } from "@/components/qr/QRGeneratorShell";
 
 export default function QrGeneratorPage() {
   return (
-    <RouteStub
-      title="QR Generator"
-      description="The main QR builder (content, design, preview) lands in Module 2.4."
-    />
+    <div className="p-6">
+      <QRGeneratorShell />
+    </div>
   );
 }
