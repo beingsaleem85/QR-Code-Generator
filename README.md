@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# QR Code Generator
+
+A production-oriented QR code generation platform: static and dynamic QR codes, live design customization, an account dashboard, and scan analytics. Built with functional/UX inspiration from QR.io, using an original visual identity and implementation.
+
+This project is being built in strict phase order:
+
+```
+STRUCTURE → UI → FEATURES
+```
+
+See [`QR_Code_Generator_Master_Build_Prompt.md`](./QR_Code_Generator_Master_Build_Prompt.md) for the full module-by-module build spec, and [`docs/WORKLOG.md`](./docs/WORKLOG.md) for current progress.
+
+## Tech Stack
+
+- **Frontend:** Next.js (App Router, latest stable) + TypeScript (strict) + React
+- **Styling:** Tailwind CSS
+- **Backend (planned):** Supabase — Postgres, Auth, Storage, Row Level Security
+- **Quality:** ESLint (flat config), Prettier, TypeScript strict checks
+
+Supabase is not yet connected. It will be integrated in Phase 3 (Features), starting with Module 3.1, once client/server data access is actually needed.
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Script                 | Purpose                           |
+| ---------------------- | --------------------------------- |
+| `npm run dev`          | Start the dev server (Turbopack)  |
+| `npm run build`        | Production build                  |
+| `npm run start`        | Run the production build          |
+| `npm run lint`         | ESLint                            |
+| `npm run typecheck`    | TypeScript check (no emit)        |
+| `npm run format`       | Format the codebase with Prettier |
+| `npm run format:check` | Check formatting without writing  |
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the full directory architecture and responsibilities of each module.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Environment Variables
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Copy `.env.example` to `.env.local` and fill in values as each module requires them. Never commit `.env.local` or real secrets. See [`docs/SUPABASE_SETUP.md`](./docs/SUPABASE_SETUP.md) once it exists (added when Supabase integration begins).
 
-## Deploy on Vercel
+## Documentation
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — directory & system architecture
+- [`docs/WORKLOG.md`](./docs/WORKLOG.md) — per-module build log
+- [`docs/SESSION_HANDOFF.md`](./docs/SESSION_HANDOFF.md) — state for resuming work in a new session

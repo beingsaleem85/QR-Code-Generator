@@ -1,0 +1,2 @@
+-- Local development seed data.
+-- Populated starting in Module 1.4 (Supabase Database Architecture).
