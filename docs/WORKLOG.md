@@ -491,3 +491,31 @@ Known issues:
 Next:
 
 - Module 2.9 — Account, Files, Settings UI
+
+## Module 2.9 — Account, Files, Settings UI
+
+Status: COMPLETE
+
+Completed:
+
+- **Account** (`/dashboard/account`): `src/types/account.ts` + `src/lib/account/mock-data.ts` (`MOCK_PROFILE`) stand in for a `profiles` row joined with `auth.users.email`. New `Avatar` UI primitive (initials fallback when no `avatarUrl`). `AccountProfileForm` (new, RHF + Zod via `src/lib/validation/account/profile.ts`) edits display name only — email renders as a disabled, read-only field since it belongs to `auth.users`, not `profiles`, and this app never writes to it directly. Follows the exact validated Module 2.5 pattern: real client-side validation, a genuine loading state, an honest "not connected to a backend yet" `Alert` on submit. Password/security entry point is a disabled `Button` with an explanatory note.
+- **Files** (`/dashboard/files`): `src/types/asset.ts` + `src/lib/files/mock-data.ts` (`MOCK_ASSETS`, 5 entries covering all 3 upload states and both linked/unlinked-to-a-QR-code cases) mirror `qr_assets` (Module 1.4). New `formatBytes` helper (`src/lib/utils/format-bytes.ts`). `AssetTable`/`AssetCard` reuse the exact dual-render desktop/mobile pattern from Module 2.6's QR codes list. `AssetUploadStateBadge` mirrors `QRCodeStatusBadge`.
+- **Files delete is real, not disabled** — a deliberate exception to this app's "disable premature actions" convention, because the master prompt explicitly asks for a working delete-with-confirmation interaction. `DeleteAssetButton` (new) opens a native `<dialog>` confirmation (same modal pattern as `MobileNavDrawer`'s drawer). `FilesView` (new, `"use client"`) owns the asset list in local state — confirming delete removes the row from that state only, not from any backend; a reload restores the full mock list. Documented clearly (component comment + `docs/ARCHITECTURE.md`) so this isn't mistaken for real persistence. Real Storage/`qr_assets` deletion arrives with Module 3.8. "Upload file" stays a disabled button (needs Module 3.8's Storage integration).
+- **Settings** (`/dashboard/settings`): 3 rows (default QR design, default download format, analytics privacy) taken directly from the master prompt's own "potential settings" list. Every control is a visibly disabled `Select` with a note on which future module wires it up — not an enabled control that silently does nothing, per the master prompt's explicit "avoid fake toggles" instruction.
+- **Found and worked around a real jsdom gap while writing tests**: `HTMLDialogElement.prototype.showModal`/`.close` are unimplemented in this project's jsdom version (confirmed via an actual failing test — `TypeError: dialogRef.current?.showModal is not a function` — not assumed). This is also why `MobileNavDrawer` (Module 2.2) was never covered by a component test. Added a small polyfill (toggles the `open` attribute) scoped to `tests/unit/components/FilesView.test.tsx` rather than a global `vitest.config.mts` setup file, since it's the first test that needs it.
+
+Verification:
+
+- `npm run typecheck` / `lint` (0 errors, same 8 pre-existing informational warnings) / `format:check` — pass
+- `rm -rf .next && npm run build` — pass, all 25 routes build
+- Added `tests/unit/utils/format-bytes.test.ts` (4 tests), `tests/unit/components/AccountProfileForm.test.tsx` (3 tests: pre-filled/read-only fields, validation error on empty name, loading state on submit), `tests/unit/components/FilesView.test.tsx` (3 tests: linked-QR-name/Unlinked rendering, delete-then-empty-state, cancel-keeps-the-asset).
+- Suite: 88/88 passing, confirmed stable across 2 consecutive full-suite runs.
+- Route content verified via `curl` against the production server: `/dashboard/account` (profile name/email/Change password), `/dashboard/files` (both mock file names, an "Unlinked" entry, and linked QR code names), `/dashboard/settings` (all 3 setting rows).
+
+Known issues:
+
+- None blocking. Files delete is local-state-only by design (see above), not a defect. Account email/password and every Settings control are intentionally non-functional pending their respective Phase 3 modules.
+
+Next:
+
+- Module 2.10 — UI Phase Completion Gate

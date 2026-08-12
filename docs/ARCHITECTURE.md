@@ -566,3 +566,33 @@ A 6th mock QR code ("Referral Program", dynamic, `scanCount: 0`) was added speci
 - [ ] QR code filter — deliberately omitted, redundant on this per-QR-code-scoped page (see above)
 - [x] Country/device filters
 - [x] "No scans yet" empty state, and a distinct "no scans in this range" state for QR codes with real history outside the current filter
+
+## Account, Files, Settings UI
+
+Established in Module 2.9, replacing the last three `RouteStub`s in the dashboard nav. This module deliberately scoped down from what a full account/files/settings surface could be, per the master prompt's own instructions for it ("initially limit to settings that actually exist", "avoid fake toggles").
+
+### Account (`/dashboard/account`)
+
+`profiles` (Module 1.4) holds `display_name`/`avatar_url`; email lives on `auth.users`, which this app never writes to directly — so `AccountProfileForm` only has one real editable field (display name), with email rendered as a disabled, read-only `Input`. The form itself follows the exact pattern validated in Module 2.5's `LoginForm`/`SignupForm`: real Zod validation, a genuine loading state around a stand-in delay, and an honest `Alert` on completion ("not connected to a backend yet") rather than a fake success. `Avatar` (new, `src/components/ui/Avatar.tsx`) renders an uploaded `avatarUrl` or falls back to initials-on-a-primary-color-circle — general enough to reuse elsewhere later (e.g. a header user menu) rather than a one-off inline element. The password/security entry point is a disabled `Button` with an explanatory note, matching every other pre-Module-3.1 auth-adjacent action in this app.
+
+### Files (`/dashboard/files`)
+
+Mirrors `qr_assets` (Module 1.4): file name, `mimeType`, `sizeBytes` (via a new `formatBytes` helper, `src/lib/utils/format-bytes.ts`), `linkedQrCodeId` (resolved to a QR code name via a `Map` built from `MOCK_QR_CODES`, or "Unlinked"), and `uploadState` (`ready`/`uploading`/`failed`, via `AssetUploadStateBadge`, styled like `QRCodeStatusBadge`). Desktop/mobile rendering reuses the exact dual-render pattern established for the QR codes list in Module 2.6 (`AssetTable` + `AssetCard`, both rendered, CSS breakpoints pick which shows) rather than inventing a new responsive strategy.
+
+**Delete is genuinely interactive, not a disabled placeholder** — a deliberate departure from this app's usual "disable premature actions" convention, because the master prompt explicitly asks for "delete action with confirmation" as a UI element for this module, and Module 2.7 already established the precedent that a real interaction pattern (unsaved-changes tracking) can be built and tested even with no backend behind it. `DeleteAssetButton` opens a native `<dialog>` confirmation (same modal pattern as `MobileNavDrawer`'s drawer), and `FilesView` (new, `"use client"`) owns the asset list in local component state — confirming delete removes the row from that state only. A page reload brings the full mock list back. This is documented here and in the component's own code comment specifically so it isn't mistaken for real persistence: actual Storage object + `qr_assets` row deletion arrives with Module 3.8.
+
+The "Upload file" button is disabled (file upload needs real Storage integration, Module 3.8) with a `title` explaining why, and the empty state (reachable by deleting every mock asset) reuses `EmptyState` from Module 2.6 rather than a new component.
+
+### Settings (`/dashboard/settings`)
+
+Three rows — default QR design, default download format, analytics privacy — chosen directly from the master prompt's own "potential settings" suggestions. Every control is a **visibly disabled** `Select`, not an enabled one that silently does nothing: the master prompt's explicit warning against "fake toggles" is about controls that _look_ functional but aren't, and a disabled control reads as honestly inert rather than deceptively interactive — the same reasoning already applied throughout this app to Download/Save/Archive/Delete actions ahead of their real Phase 3 modules. Each row names the specific module that will wire it up (Module 3.3/3.5 for design presets, Module 3.4 for download export, Module 3.7 for scan-detail collection) rather than a vague "coming soon."
+
+### A jsdom testing gap, worked around locally
+
+`HTMLDialogElement.prototype.showModal`/`.close` are unimplemented in this project's jsdom version (confirmed via a real failing test, not assumed) — `MobileNavDrawer` (Module 2.2) was never covered by a component test for exactly this reason. `DeleteAssetButton`'s confirmation dialog needed to be genuinely tested, so `tests/unit/components/FilesView.test.tsx` polyfills just `showModal`/`close` (toggling the `open` attribute) at the top of that test file — scoped to the file, not a global `vitest.config.mts` `setupFiles` entry, since no other test currently needs it. If a future module adds another `<dialog>`-based component test, consider promoting this polyfill to a shared setup file at that point rather than triplicating it.
+
+### Acceptance status
+
+- [x] Account: display name (editable), email (read-only), avatar, password/security entry point
+- [x] Files: file type, size, linked QR codes, upload state, delete action with confirmation
+- [x] Settings limited to settings that actually exist, no fake toggles (all controls visibly disabled with a note on what unlocks them)
