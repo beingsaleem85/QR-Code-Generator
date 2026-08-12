@@ -69,3 +69,34 @@ Known issues:
 Next:
 
 - Module 1.3 — QR Domain Model and Type System
+
+## Module 1.3 — QR Domain Model and Type System
+
+Status: COMPLETE
+
+Completed:
+
+- Defined `QRMode` and the 20-member `QRType` union, plus the `QRTypeDefinition` registry-entry interface, in `src/types/qr.ts`.
+- Built the QR type registry (`src/lib/qr/registry.ts`, `qrTypeRegistry`) — one config entry per `QRType`, config-driven rather than scattered conditionals. All 20 types are registered; the 9 types named explicitly in the master prompt (§1.3) have a real field schema and payload builder wired in, the rest carry a placeholder schema and no builder until their storage/landing-page module (3.8/3.9) lands.
+- Wrote 9 pure, typed payload builder functions under `src/lib/qr/payload-builders/`: URL, text, `mailto:` (email), `tel:` (phone), `sms:`, WhatsApp (`wa.me`), Wi-Fi (`WIFI:...`), vCard 3.0, and iCalendar `VEVENT`/`VCALENDAR` (event). Shared WIFI/vCard/iCal escaping lives in `payload-builders/shared/escaping.ts`. No QR canvas/SVG code exists in this layer — payload building and rendering stay separate per the master prompt.
+- Added a Zod schema per implemented type under `src/lib/validation/qr/`, each exporting both the schema and its inferred TS input type. Notable validation: URL normalizes scheme-less input to `https://` and rejects non-http(s) schemes; Wi-Fi requires a password unless encryption is `nopass`; vCard requires a first or last name; event rejects an end before the start.
+- Installed Zod (validation) and Vitest (test runner); added `npm run test` / `test:watch` scripts and `vitest.config.mts` (path alias resolution matching `tsconfig.json`'s `@/*`).
+- Wrote 41 unit tests across 10 files under `tests/unit/qr/` — every implemented builder has valid/invalid/Unicode-preservation cases, plus a `registry.test.ts` checking the registry's structural invariants (20 entries, self-consistent keys, `payloadBuilder` present iff the type is one of the 9 implemented ones).
+- Documented the domain model in `docs/ARCHITECTURE.md` under "QR Domain Model".
+
+Verification:
+
+- `npm run typecheck` — pass
+- `npm run lint` — pass
+- `npm run format:check` — pass
+- `npm run test` — pass, 41/41 tests across 10 files
+- `npm run build` — pass; all 21 routes still compile (unchanged from Module 1.2, since this module added no pages)
+
+Known issues:
+
+- 11 of the 20 `QRType` registry entries (`pdf`, `app`, `images`, `video`, `social`, `barcode_2d`, `multi_link`, `menu`, `feedback`, `audio`, `location`) intentionally have no field schema or payload builder yet — expected, not a defect; each is scoped to a later module.
+- No UI wiring yet — the registry and builders are not imported from any page. That's Module 2.4+ (generator UI) and Module 3.2 (real static QR generation).
+
+Next:
+
+- Module 1.4 — Supabase Database Architecture

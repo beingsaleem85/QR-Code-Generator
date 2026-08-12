@@ -39,6 +39,8 @@ Open [http://localhost:3000](http://localhost:3000).
 | `npm run typecheck`    | TypeScript check (no emit)        |
 | `npm run format`       | Format the codebase with Prettier |
 | `npm run format:check` | Check formatting without writing  |
+| `npm run test`         | Run the unit test suite (Vitest)  |
+| `npm run test:watch`   | Run unit tests in watch mode      |
 
 ## Project Structure
 

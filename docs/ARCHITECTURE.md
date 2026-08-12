@@ -133,7 +133,33 @@ A real page (unlike `/r/[slug]`) since it renders a hosted mini-page (link-in-bi
 
 ## QR Domain Model
 
-TBD — Module 1.3.
+Established in Module 1.3. Domain code is UI- and QR-rendering-library-agnostic — nothing under `src/lib/qr` or `src/types` imports React or a QR rendering package.
+
+### Types (`src/types/qr.ts`)
+
+- `QRMode = "static" | "dynamic"`
+- `QRType` — the 20-member union listed in the master build prompt (§3.2)
+- `QRTypeDefinition` — one registry entry: `key`, `label`, `icon` (a UI-layer icon key, not a component — resolved to an actual icon in the UI phase), `staticSupport`/`dynamicSupport`, `fields` (a Zod schema), an optional `payloadBuilder`, `needsStorage`/`needsLandingPage`/`supportsAnalytics` flags, and `previewUpdateStrategy` (`"immediate" | "debounced"`, used later to decide which design controls need a debounced preview per §3.4)
+
+### Registry (`src/lib/qr/registry.ts`)
+
+`qrTypeRegistry: Record<QRType, QRTypeDefinition>` is the single source of truth — no scattered `if (type === "url")` conditionals elsewhere. `getQrTypeDefinition(type)` and `listQrTypeDefinitions()` are the read APIs.
+
+All 20 types have a registry entry. Only the 9 types the master prompt explicitly names in §1.3 have a real `fields` schema and `payloadBuilder`: `url`, `text`, `email`, `phone`, `sms`, `whatsapp`, `wifi`, `vcard`, `event`. The rest (`pdf`, `app`, `images`, `video`, `social`, `barcode_2d`, `multi_link`, `menu`, `feedback`, `audio`, `location`) use a shared placeholder schema and an undefined `payloadBuilder` — they need Supabase Storage, hosted landing pages, or both, which don't exist until Phase 3. Wiring their real fields/builder is scoped to the module that adds that capability (Module 3.8 or 3.9), not Module 1.3.
+
+Because `QRTypeDefinition` has to hold 9 structurally different `fields`/`payloadBuilder` shapes in one map, `payloadBuilder` is stored as a type-erased `(input: Record<string, unknown>) => string`. The erasure is contained to a single helper (`toGenericBuilder`) in `registry.ts` — every individual builder function is still fully typed against its own input. Code that already knows the concrete QR type should import the specific builder from `src/lib/qr/payload-builders` directly rather than going through the registry's erased signature.
+
+### Payload builders (`src/lib/qr/payload-builders/`)
+
+One pure function per format — `buildUrlPayload`, `buildTextPayload`, `buildEmailPayload` (`mailto:`), `buildPhonePayload` (`tel:`), `buildSmsPayload` (`sms:`), `buildWhatsAppPayload` (`https://wa.me/...`), `buildWifiPayload` (`WIFI:...`), `buildVCardPayload` (vCard 3.0), `buildEventPayload` (iCalendar `VEVENT`). Each takes its already-validated (Zod-parsed) input and returns the encoded payload string — no QR canvas/SVG rendering happens here or anywhere in `lib/qr`; that's a separate renderer adapter added in Module 3.3. WIFI and vCard/iCalendar special-character escaping live in `payload-builders/shared/escaping.ts` since both formats need it.
+
+### Validation (`src/lib/validation/qr/`)
+
+One Zod schema per implemented type, each exporting both the schema and its inferred TS input type (e.g. `urlQrSchema` / `UrlQrInput`). Validation is a distinct step from payload building — a caller parses user input with the schema first, then passes the parsed result to the builder. Notable validation decisions: the URL schema normalizes scheme-less input to `https://` and rejects everything except `http`/`https` (blocks `javascript:`, `data:`, etc.); the Wi-Fi schema requires a password unless encryption is `"nopass"`; the vCard schema requires at least a first or last name; the event schema rejects an end time before the start time.
+
+### Testing
+
+Unit tests live under `tests/unit/qr/`, run via Vitest (`npm run test`). Every implemented payload builder has valid-input, invalid-input, and Unicode-preservation cases; `registry.test.ts` checks structural invariants (all 20 types present, keys self-consistent, a `payloadBuilder` exists if and only if the type is one of the 9 implemented ones).
 
 ## Database Schema
 
