@@ -1,6 +1,6 @@
 # Architecture
 
-Status: Phase 2 — UI, Module 2.1. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
+Status: Phase 2 — UI, Module 2.2. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
 
 ## Stack
 
@@ -87,7 +87,11 @@ Route group, no URL prefix. Marketing/content pages plus the public generator en
 /features        /(marketing)/features/page.tsx
 /pricing         /(marketing)/pricing/page.tsx
 /faq             /(marketing)/faq/page.tsx
+/privacy         /(marketing)/privacy/page.tsx    (added Module 2.2, footer link target)
+/terms           /(marketing)/terms/page.tsx      (added Module 2.2, footer link target)
 ```
+
+`src/app/(marketing)/layout.tsx` (Module 2.2) wraps every route in this group with `Header` + `Footer` — added when the header/footer were built rather than in Module 1.2, since a layout with no real header/footer to render would have been premature.
 
 ### Auth routes — `src/app/(auth)/`
 
@@ -327,3 +331,32 @@ Confirmed in the compiled production CSS (not just assumed from the source) that
 - [x] Core primitives render consistently (`Button`, `Card`, `Placeholder` — verified via compiled CSS and a live browser session)
 - [x] Desktop example works (`/qr-generator`, verified live); mobile/tablet pass is Module 2.10's dedicated responsive audit, not re-litigated per-module
 - [x] No inaccessible low-contrast primary controls (contrast math above; focus-ring corrected after measuring it, not assumed correct)
+
+## Marketing Shell (Header, Footer, Mobile Nav)
+
+Established in Module 2.2. `src/components/layout/{Header,Footer,Logo,MobileNavDrawer}.tsx`, wired into every `(marketing)` route via `src/app/(marketing)/layout.tsx`. `(auth)` and `(dashboard)` do **not** get this shell — auth pages get their own minimal layout (Module 2.5) and the dashboard gets `DashboardSidebar`/`DashboardHeader` (Module 2.6), not the marketing chrome.
+
+### Brand placeholder
+
+"QRForge" — a placeholder name chosen for this module (this project has no fixed brand name yet); trivially renameable without touching the mark. The logomark (`Logo.tsx`) is an original abstract SVG (corner squares echoing a QR finder pattern) — not a reproduction of any real product's logo, per the master build prompt's explicit "do not clone QR.io branding" requirement.
+
+### Header
+
+Desktop: horizontal nav (Generator, Static QR, Dynamic QR, Features, Pricing) + Log in + a primary "Create QR Code" CTA (→ `/qr-generator`, no account required, per the master prompt's UX-improvement list §10.12). Mobile (`< md`): the same links collapse into `MobileNavDrawer`.
+
+### Mobile nav — native `<dialog>`, not a hand-rolled modal
+
+`MobileNavDrawer` uses `<dialog>` in modal mode (`showModal()`) specifically so the browser provides focus trapping and Escape-to-close for free, rather than reimplementing both by hand. What the component _does_ own: open/close React state (synced via the dialog's native `close` event, not just the trigger click, so backdrop-click and Escape both stay in sync), backdrop-click dismissal (checking `event.target === dialogRef.current`), and closing on nav-link click so client-side navigation doesn't leave the drawer open over the new page.
+
+Verified live in a browser (not just read from source): opens via the trigger, moves focus into the dialog automatically, closes via the explicit close button _and_ via a backdrop click, and closing via a nav link both navigates (confirmed via `window.location.pathname`) and closes the drawer in the same interaction. Desktop nav and the mobile trigger were confirmed mutually exclusive at 1280px and 375px viewports via computed `display` values, not just visual inspection. All interactive targets in the drawer are ≥44px (WCAG 2.5.5-style touch target sizing), bumped up from an initial 40px trigger button once measured.
+
+### Footer
+
+Four link groups (Product, QR Types, Resources, Company) plus a copyright line. "Company" links to `/privacy` and `/terms` — two minimal `RouteStub` routes added in this module specifically so the footer has no dead links; their real legal copy is still Module 3.15's job, this module only guarantees the route exists and returns 200. No language switcher, per the master prompt's explicit "don't fake it" instruction — multilingual support isn't implemented.
+
+### Acceptance status
+
+- [x] Header responsive (verified: desktop nav vs. mobile trigger are mutually exclusive by computed style at both viewport sizes)
+- [x] Mobile nav accessible (native focus trap + Escape via `<dialog>`; explicit close button; backdrop dismissal; ≥44px touch targets; verified live, not assumed)
+- [x] Footer responsive (2-column mobile / 4-column desktop grid, no horizontal overflow at 375px — verified via `scrollWidth` vs. `innerWidth`)
+- [x] All visible links point to a valid route from the Module 1.2 map or an intentionally added stub (`/privacy`, `/terms`) — none are dead

@@ -267,3 +267,41 @@ Known issues:
 Next:
 
 - Module 2.2 — Public Header, Footer, and Marketing Shell
+
+## Module 2.2 — Public Header, Footer, and Marketing Shell
+
+Status: COMPLETE
+
+Completed:
+
+- Refactored `Button` to export a `buttonVariants()` helper so `next/link` CTAs can share the exact same styling as real `<button>`s without duplicating the variant/size tables.
+- Added an original SVG logomark + "QRForge" wordmark (`Logo.tsx`) — a placeholder brand name, not a QR.io copy; the mark is an original abstract corner-square motif.
+- Built `Header.tsx`: desktop horizontal nav (Generator, Static QR, Dynamic QR, Features, Pricing, Log in) plus a primary "Create QR Code" CTA, using the Module 2.1 tokens/`Button` primitive.
+- Built `MobileNavDrawer.tsx` using the native `<dialog>` element in modal mode — gets focus trapping and Escape-to-close from the browser for free rather than reimplementing them; owns open/close state (synced via the dialog's `close` event), backdrop-click dismissal, and closes on nav-link click.
+- Built `Footer.tsx`: 4 link groups (Product, QR Types, Resources, Company) + copyright.
+- Added `/privacy` and `/terms` as minimal `RouteStub` routes (Module 3.15 still owns the real legal copy) so the footer has no dead links.
+- Added `src/app/(marketing)/layout.tsx` wiring `Header`+`Footer` around every marketing page — `(auth)`/`(dashboard)` intentionally excluded, they get their own layouts in Modules 2.5/2.6.
+
+Verification:
+
+- `npm run typecheck` — pass
+- `npm run lint` — pass
+- `npm run format:check` — pass
+- `npm run test` — pass, 41/41 (unaffected)
+- `rm -rf .next && npm run build` — pass; 23 routes now (added `/privacy`, `/terms`). One transient Google Fonts fetch failure on the first attempt (network blip during `next/font/google` resolution) — retried immediately and succeeded, confirming it wasn't a code issue.
+- Inspected compiled production CSS directly for the trickier Tailwind v4 variants used here (`open:flex`/`open:flex-col` for the dialog's `[open]` state, `backdrop:bg-foreground/40` for `::backdrop`) and confirmed both compiled with the correct selectors/values before trusting them in the browser.
+- **Live browser verification** against the production server, at both 1280px and 375px viewports:
+  - Desktop nav and the mobile hamburger trigger confirmed mutually exclusive by computed `display` at each width (not just visually).
+  - Drawer: opens and moves focus inside automatically (native `showModal()` behavior); confirmed both the explicit close button and a synthesized backdrop click correctly close it and sync `open` state back to `false`; confirmed clicking a nav link both navigates (`window.location.pathname` changed to `/qr-generator`) and closes the drawer in one interaction.
+  - No horizontal overflow at 375px on both `/` and `/qr-generator` (`document.documentElement.scrollWidth` === `window.innerWidth`).
+  - Zero console errors throughout.
+  - Caught a real gap during verification, not left for the Module 2.10 audit: the drawer trigger/close buttons were 40px, under the ~44px touch-target guideline — bumped to 44px (`h-11 w-11`) and the nav-link row padding increased to match, then re-verified typecheck/lint/build.
+  - Noted (not a bug): the automation `computer` tool's click/key simulation didn't reliably reach the page in this headless session ("Browser pane is not displayed" / frame-compositing unavailable) — switched to `javascript_tool` (executes directly against the DOM) for all interaction testing after confirming the first `computer` click silently failed to register.
+
+Known issues:
+
+- None blocking. `/privacy`/`/terms` remain intentional stubs pending Module 3.15's real legal content — this is the module's designed scope, not a defect.
+
+Next:
+
+- Module 2.3 — Home Page UI

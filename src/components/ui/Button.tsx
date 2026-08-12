@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes } from "react";
 
-type ButtonVariant = "primary" | "secondary" | "destructive" | "ghost";
-type ButtonSize = "sm" | "md" | "lg";
+export type ButtonVariant = "primary" | "secondary" | "destructive" | "ghost";
+export type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -22,6 +22,24 @@ const SIZE_STYLES: Record<ButtonSize, string> = {
   lg: "h-12 px-5 text-base",
 };
 
+/**
+ * Shared with any element that needs to *look* like a Button without being
+ * one — most commonly a `next/link` CTA, which can't render as a
+ * `<button>`. Keeps the two in visual lockstep without duplicating the
+ * variant/size class tables.
+ */
+export function buttonVariants({
+  variant = "primary",
+  size = "md",
+  className,
+}: {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  className?: string;
+} = {}): string {
+  return `inline-flex items-center justify-center rounded-lg font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT_STYLES[variant]} ${SIZE_STYLES[size]} ${className ?? ""}`;
+}
+
 export function Button({
   variant = "primary",
   size = "md",
@@ -29,11 +47,5 @@ export function Button({
   type = "button",
   ...props
 }: ButtonProps) {
-  return (
-    <button
-      type={type}
-      className={`inline-flex items-center justify-center rounded-lg font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT_STYLES[variant]} ${SIZE_STYLES[size]} ${className ?? ""}`}
-      {...props}
-    />
-  );
+  return <button type={type} className={buttonVariants({ variant, size, className })} {...props} />;
 }
