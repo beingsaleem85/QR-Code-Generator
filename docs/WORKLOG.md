@@ -195,3 +195,42 @@ Known issues:
 Next:
 
 - Module 1.7 — Structure Phase Verification
+
+## Module 1.7 — Structure Phase Verification
+
+Status: COMPLETE — **PHASE 1 (STRUCTURE) GATE PASSED**
+
+Verification performed fresh (not reusing prior module runs):
+
+- `rm -rf node_modules && npm ci` — clean reproducible install from the committed lockfile, 0 vulnerabilities
+- `npm run typecheck` — pass
+- `npm run lint` — pass
+- `npm run format:check` — pass
+- `npm run test` — pass, 41/41 across 10 files
+- `rm -rf .next && npm run build` — clean production build, all 21 routes compiled (17 static, 4 dynamic), no warnings
+- `npm run start` (production server, not `dev`) + full route smoke test: all 21 routes → 200; `/r/[slug]` → 404 with `{"error":"not_found"}` (correct — no real dynamic-QR data source yet); an unmatched route → 404 via `not-found.tsx`. Server stopped cleanly afterward.
+- `supabase start` + `supabase db reset` against the local Docker-only stack (same one used in Modules 1.4/1.5) — all 8 migrations applied cleanly in order; final tally confirmed 5 tables, 37 RLS policies (17 table + 20 storage), 5 Storage buckets, matching the counts validated in Modules 1.4/1.5 exactly. Stack stopped afterward.
+- `git status` after the full cycle showed zero unexpected changes — confirms `package-lock.json` and build output are deterministic, not just "worked once."
+
+### Structure Phase Completion Report
+
+**1. Architecture summary.** Next.js 16.3.0 (App Router, Turbopack, `src/` layout), TypeScript strict mode, Tailwind CSS 4, ESLint flat config + Prettier, Vitest for unit tests. Directory architecture matches the master prompt's suggested layout (`app/`, `components/{ui,layout,marketing,qr,dashboard,analytics}/`, `features/*` — reserved, not yet used, `lib/{qr,validation,utils}/`, `server/{actions,repositories,services}/`, `types/`, `config/` — reserved, `supabase/migrations/`). No feature logic implemented ahead of scope; Supabase is not connected to the app yet (schema/RLS exist as migrations, validated locally, but no `src/lib/supabase` client exists — that's Module 3.1).
+
+**2. Route map.** 21 routes across 3 route groups + 2 top-level dynamic segments:
+`(marketing)`: `/`, `/qr-generator` (real `QRGeneratorShell`, not a stub), `/qr-types`, `/static-qr`, `/dynamic-qr`, `/features`, `/pricing`, `/faq`.
+`(auth)`: `/login`, `/signup`, `/forgot-password`.
+`(dashboard)`: `/dashboard`, `/dashboard/qr-codes`, `/dashboard/qr-codes/new`, `/dashboard/qr-codes/[id]`, `/dashboard/qr-codes/[id]/edit`, `/dashboard/qr-codes/[id]/analytics`, `/dashboard/files`, `/dashboard/account`, `/dashboard/settings`.
+Top-level: `/r/[slug]` (Route Handler, redirect contract only), `/p/[slug]` (hosted landing page skeleton), `/api/health`.
+Full detail in `docs/ARCHITECTURE.md` → "Route Architecture".
+
+**3. Data model summary.** 5 tables (`profiles`, `qr_folders`, `qr_codes`, `qr_scan_events`, `qr_assets`) as deterministic SQL migrations, with FKs, indexes, check constraints (`qr_codes.qr_type` mirrors the `QRType` union in `src/types/qr.ts`), and deliberate per-relationship delete behavior (cascade vs. set-null, documented per-table). `qr_codes` centralizes static/dynamic; slug is a partial-unique index (required for dynamic, optional for static). Full detail in `docs/ARCHITECTURE.md` → "Database Schema".
+
+**4. Security model summary.** RLS enabled (default-deny) on every table from the moment each was created; owner-only CRUD policies added in Module 1.5 (`auth.uid() = user_id`/`= id`). Two deliberate gaps, not oversights: `qr_codes` has no `anon` SELECT policy and `qr_scan_events` has no client-facing INSERT policy at all — both routed through a privileged server-side path (service-role key or `SECURITY DEFINER` RPC) in Module 3.6/3.7 instead, per master prompt §7. 5 Storage buckets (1 public — `avatars`, 4 private) with MIME/size limits and a `{user_id}/...` path convention enforced by `storage.objects` RLS. Cross-user access denial and anon lockout were functionally tested (not just written), see Module 1.5's worklog entry. No `(dashboard)` route protection exists yet — expected, since there's no auth to enforce (Module 3.1).
+
+**5. Known blockers.** None. Every module in Phase 1 was completable without external input.
+
+**6. Credential requirements for Phase 2/3.** **None needed yet.** Phase 2 (UI) uses mock/local data per its own charter — no Supabase connection required. The first point any live/hosted Supabase credential becomes necessary is Module 3.1 (Supabase Connection and Authentication), and even then only the minimum value for what's being wired up first (see `QR_Code_Generator_Master_Build_Prompt.md` §15, "Credential Request Protocol") — not "send me all keys."
+
+### PHASE GATE: PASSED
+
+Phase 1 (Structure) is complete and verified. Proceeding to **Phase 2 — UI**, starting with Module 2.1 (Visual Design System).
