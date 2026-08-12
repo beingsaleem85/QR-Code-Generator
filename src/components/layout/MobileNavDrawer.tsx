@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { buttonVariants } from "@/components/ui/Button";
 
 interface MobileNavDrawerProps {
-  links: { label: string; href: string }[];
+  links: readonly { label: string; href: string }[];
   cta?: { label: string; href: string };
 }
 

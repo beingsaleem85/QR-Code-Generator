@@ -1,31 +1,42 @@
-const NAV_ITEMS = [
-  { label: "Overview", href: "/dashboard" },
-  { label: "QR Codes", href: "/dashboard/qr-codes" },
-  { label: "Create QR", href: "/dashboard/qr-codes/new" },
-  { label: "Files", href: "/dashboard/files" },
-  { label: "Account", href: "/dashboard/account" },
-  { label: "Settings", href: "/dashboard/settings" },
-] as const;
+"use client";
 
-interface DashboardSidebarProps {
-  activePath?: string;
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { DASHBOARD_NAV_ITEMS } from "@/components/dashboard/nav-items";
+
+/**
+ * Picks the single most specific nav item matching the current path (e.g.
+ * on /dashboard/qr-codes/new, "Create QR" wins over "QR Codes" even though
+ * both hrefs are prefixes) rather than letting multiple items match at once.
+ */
+function findActiveHref(pathname: string): string | undefined {
+  return [...DASHBOARD_NAV_ITEMS]
+    .sort((a, b) => b.href.length - a.href.length)
+    .find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.href;
 }
 
-export function DashboardSidebar({ activePath }: DashboardSidebarProps) {
+export function DashboardSidebar() {
+  const pathname = usePathname();
+  const activeHref = findActiveHref(pathname);
+
   return (
-    <nav aria-label="Dashboard" className="flex w-56 flex-col gap-1 border-r border-gray-200 p-3">
-      {NAV_ITEMS.map((item) => (
-        <a
-          key={item.href}
-          href={item.href}
-          aria-current={activePath === item.href ? "page" : undefined}
-          className={`rounded-md px-3 py-2 text-sm ${
-            activePath === item.href ? "bg-gray-900 text-white" : "text-gray-700 hover:bg-gray-100"
-          }`}
-        >
-          {item.label}
-        </a>
-      ))}
+    <nav aria-label="Dashboard" className="flex w-56 flex-col gap-1 border-r border-border p-3">
+      {DASHBOARD_NAV_ITEMS.map((item) => {
+        const active = item.href === activeHref;
+
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={active ? "page" : undefined}
+            className={`rounded-lg px-3 py-2 text-sm font-medium ${
+              active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-background"
+            }`}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }

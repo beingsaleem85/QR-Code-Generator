@@ -1,6 +1,6 @@
 # Architecture
 
-Status: Phase 2 — UI, Module 2.5. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
+Status: Phase 2 — UI, Module 2.6. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
 
 ## Stack
 
@@ -118,6 +118,8 @@ Route group, no URL prefix. Marketing/content pages plus the public generator en
 /dashboard/account                  profile/account
 /dashboard/settings                 app settings
 ```
+
+`src/app/(dashboard)/layout.tsx` (Module 2.6) is the third and last route-group layout — `DashboardSidebar` on desktop (`md:`+), a compact top bar with `Logo` + a reused `MobileNavDrawer` on mobile. `/dashboard` (Overview) and `/dashboard/qr-codes` (list) are real pages now; the rest (`new`, `[id]` detail/edit/analytics, `files`, `account`, `settings`) remain `RouteStub`s — Module 2.6's scope is layout + overview + list per the master prompt, not the full dashboard surface (Modules 2.7/2.9 own those).
 
 ### Public dynamic redirect — `src/app/r/[slug]/route.ts`
 
@@ -449,3 +451,35 @@ Following the Module 2.4 finding that this session's Browser pane doesn't reliab
 - [x] Error message area (wired, currently dormant — nothing has failed yet since there's no backend)
 - [x] Links between login/signup/recovery
 - [x] No fake social login
+
+## Dashboard UI
+
+Established in Module 2.6. Migrated the Module 1.6 dashboard component skeletons (`DashboardSidebar`, `DashboardHeader`, `QRCodeCard`, `QRCodeTable`, `QRCodeStatusBadge`, `EmptyState`, `AnalyticsSummaryCards`) from their original `gray-*` placeholder classes to the Module 2.1 semantic tokens, and built the layout + two real pages the master prompt's Module 2.6 calls for.
+
+### Mobile nav: reused, not rebuilt
+
+Rather than writing a second drawer, `(dashboard)/layout.tsx` reuses `MobileNavDrawer` (Module 2.2, native `<dialog>`) with the dashboard's own `DASHBOARD_NAV_ITEMS` — the component's `links` prop was already a generic `{label, href}[]` shape. `MobileNavDrawer`'s prop type was widened to `readonly {...}[]` (a compatible, additive change) so a `const`-asserted nav array can be passed directly without re-spreading it into a mutable array. `DASHBOARD_NAV_ITEMS` itself was extracted to `src/components/dashboard/nav-items.ts` so `DashboardSidebar` and the layout's mobile drawer share one source instead of two copies drifting apart.
+
+### Active-link detection: found and fixed a real bug before it shipped
+
+`DashboardSidebar` was converted to a Client Component using `usePathname()` to auto-detect the active item (dropping the `activePath` prop Module 1.6 had every caller pass manually). The first implementation used a naive per-item `pathname.startsWith(item.href)` check — which breaks the moment two nav hrefs share a prefix: `/dashboard/qr-codes` ("QR Codes") and `/dashboard/qr-codes/new` ("Create QR") both start with `/dashboard/qr-codes`, so visiting `/dashboard/qr-codes/new` would have marked **both** links `aria-current="page"` simultaneously. Caught by writing the component test first (asserting only one should be current) rather than by inspection — the naive version failed it. Fixed with `findActiveHref()`: sort nav items by href length descending, return the first (i.e. most specific) whose href exactly matches or is a genuine path-segment prefix (`pathname.startsWith(href + "/")`, not a bare string prefix) of the current path.
+
+### Mock data, not fake persistence
+
+`src/lib/qr/mock-data.ts` exports `MOCK_QR_CODES` (5 entries spanning every `QRCodeStatus`/mode combination) — explicitly commented as Phase 2 UI-only, never imported outside dashboard pages, replaced by real Supabase queries in Module 3.5. The Overview page's "Scans This Period" stat is left as `"—"` rather than a fabricated number, since no time-windowed aggregation logic exists yet — consistent with the "honest, not fake" pattern established in Module 2.5's auth forms.
+
+### Card/table viewport switching: CSS-only, not JS-driven
+
+`/dashboard/qr-codes` renders both `QRCodeTable` (`hidden md:block`) and a `QRCodeCard` grid (`md:hidden`) unconditionally — the browser's own media-query evaluation picks the right one, with no `matchMedia`/resize-listener JS needed. Both are present in the same server-rendered HTML (confirmed via `curl`, not just assumed), so there's no client-side layout shift or hydration-dependent branch.
+
+### Verification approach
+
+Consistent with Modules 2.4/2.5: component tests over Browser-pane interaction testing. `EmptyState.test.tsx` (title/description/action rendering, and that a missing description doesn't leave stray markup) and `DashboardSidebar.test.tsx` (the active-link bug fix above, using `vi.mock("next/navigation")` to control `usePathname()`) — 5 new tests. Route content verified via `curl` against the production server: both `/dashboard` and `/dashboard/qr-codes` return 200 with the expected mock QR names in the SSR HTML, and the table headers are confirmed present in the markup (proving the desktop branch renders, not just the mobile one).
+
+### Acceptance status
+
+- [x] Dashboard layout (sidebar + header, desktop and mobile)
+- [x] Mobile sidebar collapses to a drawer (reused `MobileNavDrawer`, not a second implementation)
+- [x] Overview screen with stat placeholders and recent QR codes (real component code, mock data)
+- [x] QR code list with card/table viewport strategy
+- [x] Strong empty state for zero QR codes (component-tested; not visible in the live mock-data demo since the demo data is intentionally non-empty to also prove the list rendering works)

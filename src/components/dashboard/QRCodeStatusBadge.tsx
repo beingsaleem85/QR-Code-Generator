@@ -1,9 +1,9 @@
 import type { QRCodeStatus } from "@/types/qr-record";
 
 const STATUS_STYLES: Record<QRCodeStatus, string> = {
-  active: "bg-green-100 text-green-800",
-  paused: "bg-amber-100 text-amber-800",
-  archived: "bg-gray-100 text-gray-600",
+  active: "bg-success/10 text-success",
+  paused: "bg-warning/10 text-warning",
+  archived: "bg-background text-muted-foreground",
 };
 
 interface QRCodeStatusBadgeProps {

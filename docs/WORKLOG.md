@@ -397,3 +397,32 @@ Known issues:
 Next:
 
 - Module 2.6 — Dashboard UI
+
+## Module 2.6 — Dashboard UI
+
+Status: COMPLETE
+
+Completed:
+
+- Migrated the Module 1.6 dashboard skeletons (`DashboardSidebar`, `DashboardHeader`, `QRCodeCard`, `QRCodeTable`, `QRCodeStatusBadge`, `EmptyState`, `AnalyticsSummaryCards`) from `gray-*` placeholders to the Module 2.1 design tokens; `QRCodeCard`/`QRCodeTable` rows now link to the (still-stub) detail route.
+- Converted `DashboardSidebar` to a Client Component using `usePathname()` for automatic active-link detection, dropping the manual `activePath` prop every caller previously had to pass.
+- Extracted `DASHBOARD_NAV_ITEMS` to a shared `nav-items.ts` so `DashboardSidebar` and the new mobile drawer use one source; widened `MobileNavDrawer`'s prop type to accept a `readonly` array so a `const`-asserted nav list can be passed directly.
+- Built `src/app/(dashboard)/layout.tsx`: `DashboardSidebar` on desktop, a compact mobile top bar reusing `MobileNavDrawer` (Module 2.2) rather than building a second drawer.
+- Built the real `/dashboard` (Overview: stat cards + recent QR codes) and `/dashboard/qr-codes` (list: `QRCodeTable`/`QRCodeCard` switching purely via CSS breakpoints, empty state ready) pages using new mock data (`src/lib/qr/mock-data.ts`, 5 entries, explicitly Phase-2-only).
+
+Verification:
+
+- `npm run typecheck` / `lint` (0 errors, same 8 pre-existing warnings) / `format:check` — pass
+- `rm -rf .next && npm run build` — pass, 25 routes unchanged in count
+- **Found and fixed a real bug via test-first, not inspection**: the first `DashboardSidebar` active-link implementation used a naive `pathname.startsWith(item.href)` check, which breaks when one nav href is a literal prefix of another (`/dashboard/qr-codes` vs. `/dashboard/qr-codes/new` — visiting the `new` page would have marked both "QR Codes" and "Create QR" simultaneously `aria-current="page"`). Caught because the component test asserted only one link should be current and the naive version failed it. Fixed with `findActiveHref()`: pick the longest exact-or-segment-prefix match, not just any string prefix.
+- Added 5 component tests: `EmptyState.test.tsx` (3) and `DashboardSidebar.test.tsx` (2, covering the bug above and a QR-detail-page case that must NOT collide with "Create QR"). Suite: 59/59 passing.
+- Route content verified via `curl` against the production server (not the Browser pane): `/dashboard` and `/dashboard/qr-codes` both 200 with the expected mock QR names present in the SSR HTML; confirmed the desktop `<table>` headers are present in the markup alongside the mobile card grid (both branches render server-side, CSS picks which shows).
+
+Known issues:
+
+- `/dashboard/qr-codes/new`, `/dashboard/qr-codes/[id]` (detail/edit/analytics), `/dashboard/files`, `/dashboard/account`, `/dashboard/settings` remain `RouteStub`s — explicitly out of this module's scope (Modules 2.7/2.9 own them), not a defect.
+- The empty state is verified via component test only, not visible in the live mock-data demo, since the demo data is intentionally non-empty to also prove list rendering works. Both are real, both are tested — just not simultaneously visible in one page load.
+
+Next:
+
+- Module 2.7 — QR Detail and Edit UI
