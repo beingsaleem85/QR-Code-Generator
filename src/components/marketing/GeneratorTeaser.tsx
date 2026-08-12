@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { buttonVariants } from "@/components/ui/Button";
+import { QrPlaceholderGraphic } from "@/components/ui/QrPlaceholderGraphic";
 
 /**
  * A decorative teaser, not the real generator — the real interactive
@@ -24,62 +25,7 @@ export function GeneratorTeaser() {
           </p>
         </div>
 
-        <svg
-          width="120"
-          height="120"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true"
-          className="shrink-0"
-        >
-          <rect x="2" y="2" width="7" height="7" rx="1.5" fill="var(--color-primary)" />
-          <rect
-            x="15"
-            y="2"
-            width="7"
-            height="7"
-            rx="1.5"
-            fill="var(--color-primary)"
-            opacity="0.55"
-          />
-          <rect
-            x="2"
-            y="15"
-            width="7"
-            height="7"
-            rx="1.5"
-            fill="var(--color-primary)"
-            opacity="0.55"
-          />
-          <rect x="15" y="15" width="3" height="3" rx="1" fill="var(--color-primary)" />
-          <rect
-            x="19"
-            y="15"
-            width="3"
-            height="3"
-            rx="1"
-            fill="var(--color-primary)"
-            opacity="0.55"
-          />
-          <rect
-            x="15"
-            y="19"
-            width="3"
-            height="3"
-            rx="1"
-            fill="var(--color-primary)"
-            opacity="0.55"
-          />
-          <rect
-            x="19"
-            y="19"
-            width="3"
-            height="3"
-            rx="1"
-            fill="var(--color-primary)"
-            opacity="0.3"
-          />
-        </svg>
+        <QrPlaceholderGraphic size={120} className="shrink-0" />
       </Card>
     </section>
   );

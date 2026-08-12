@@ -483,3 +483,41 @@ Consistent with Modules 2.4/2.5: component tests over Browser-pane interaction t
 - [x] Overview screen with stat placeholders and recent QR codes (real component code, mock data)
 - [x] QR code list with card/table viewport strategy
 - [x] Strong empty state for zero QR codes (component-tested; not visible in the live mock-data demo since the demo data is intentionally non-empty to also prove the list rendering works)
+
+## QR Detail and Edit UI
+
+Established in Module 2.7. `/dashboard/qr-codes/[id]` (detail) and `/dashboard/qr-codes/[id]/edit` (edit) are real now; both look up `MOCK_QR_CODES` by `id` (`src/lib/qr/mock-data.ts`, extended this module with `createdAt`/`destinationSummary` and a `findMockQrCode()` helper) and call `notFound()` for an unknown id.
+
+### A fourth copy of the placeholder graphic → extracted
+
+Before this module, the same corner-square SVG motif existed independently in `Logo`, `QRPreviewPanel`, and `GeneratorTeaser`. The detail page's large preview needed a fourth copy, which was the actual trigger to extract `src/components/ui/QrPlaceholderGraphic.tsx` and refactor the three existing usages to call it — a small, low-risk, additive change (each call site just swapped inline SVG markup for a component call; no behavior changed) directly motivated by this module's own need, not a speculative cleanup of unrelated code.
+
+### Edit page reuses the generator shell, doesn't rebuild a form
+
+Per the master prompt's explicit instruction to reuse generator design/content components for editing, `/dashboard/qr-codes/[id]/edit` renders `QRGeneratorShell` (Module 2.4) rather than a separate edit-specific form. `QRGeneratorShell` gained an optional `variant?: "create" | "edit"` + `initialName?: string` prop pair (defaulting to the original Module 2.4 behavior when omitted, so `/qr-generator` is unaffected):
+
+- **Dirty tracking**: `isDirty` compares every piece of shell state (name, mode, type, content, design) against its initial value. Only `name` is genuinely pre-filled from mock data today — content/design pre-fill needs a real per-QR-code payload/design record, which doesn't exist until Module 3.5, and the edit page says so explicitly via an `Alert`.
+- **Unsaved-changes indicator + Save Changes**: shown only in `edit` mode; the button is disabled until `isDirty`.
+- **Navigation guard — real, but scoped**: a `beforeunload` listener (added only while dirty) blocks the browser closing/reloading/navigating away via a typed URL — this is genuinely tested (see below), not just declared. **In-app SPA navigation** (clicking another dashboard sidebar link while dirty) is **not** intercepted — the App Router doesn't expose a simple per-navigation confirm hook, and building one is disproportionate to guarding mock data that isn't actually at risk of being lost yet. Documented as a known scope boundary, revisited once Module 3.5 makes losing an edit a real consequence.
+- `Reset` now restores `initialName` (not a blank string) in both variants, so "reset" means "discard my edits since the page loaded," which is coherent for `create` (initial name is usually `""`) and `edit` (initial name is the loaded QR's name) alike.
+
+### A documented Next.js constraint, not a bug: `notFound()` returns HTTP 200 here
+
+Visiting `/dashboard/qr-codes/999` (a nonexistent id) correctly renders the `not-found.tsx` UI — but a raw `curl -i` shows `HTTP/1.1 200 OK`, not `404`. Investigated rather than assumed either way: Next.js's own streaming docs (`node_modules/next/dist/docs/01-app/02-guides/streaming.md`, "The HTTP contract") state that once streaming begins — which happens as soon as a `loading.tsx` Suspense fallback renders — the response status is locked in and cannot become a 4xx afterward. `src/app/loading.tsx` (Module 1.1) is a root-level Suspense boundary covering every route including this one, and the detail/edit pages must `await params` (Next 16's async params) before they can know whether the record exists, so `notFound()` is inherently called after streaming has already started. The docs' own recommended fix — call `notFound()` before any `await`/Suspense boundary — isn't available to us here, since knowing _what_ to look up requires awaiting `params` first. Fixing this properly would mean removing or rescoping the app-wide root `loading.tsx`, which is out of this module's scope and would affect every route, not just this one. Left as a known, understood limitation rather than silently claimed as correct.
+
+### Verification approach
+
+6 new component tests in `tests/unit/components/QRGeneratorShellEdit.test.tsx` cover the actually-interactive parts: no dirty indicator/disabled Save Changes before any edit; both appear after an edit; `beforeunload`'s `preventDefault()` fires only when dirty (dispatched manually via `window.dispatchEvent(new Event("beforeunload", { cancelable: true }))` and asserting `event.defaultPrevented`); `Reset` restores the initial name and clears dirty state; `create` mode shows neither Save Changes nor the indicator. Route content verified via `curl` against the production server: detail pages for a dynamic QR (analytics link present) and a static QR (analytics link absent) both render the expected fields; the edit page shows the info note and "Save Changes"; the 404 case's content (not status code, see above) was also verified.
+
+### Acceptance status
+
+- [x] Large QR preview (placeholder graphic, real rendering is Module 3.3)
+- [x] Name, status, type, mode, destination/content summary, created/updated timestamps
+- [x] Download actions (present, disabled — Module 3.4)
+- [x] Edit action
+- [x] Analytics summary for dynamic codes only (conditionally rendered, verified for both a dynamic and a static mock QR)
+- [x] Destructive actions visually separated (bordered `border-destructive/30` "Danger zone" section, disabled — Module 3.11)
+- [x] Edit page reuses generator design/content components (renders `QRGeneratorShell` directly, not a parallel form)
+- [x] Unsaved-changes state shown
+- [x] Clear Save Changes action
+- [x] Confirm navigation if changes would be lost — real for browser close/reload/typed-URL nav (`beforeunload`, tested); in-app SPA navigation intentionally not intercepted yet (documented above, not silently dropped)

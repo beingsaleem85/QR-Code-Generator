@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { CircleAlert, CircleCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, Info } from "lucide-react";
 
-type AlertVariant = "error" | "success";
+type AlertVariant = "error" | "success" | "info";
 
 interface AlertProps {
   variant: AlertVariant;
@@ -11,11 +11,13 @@ interface AlertProps {
 const VARIANT_STYLES: Record<AlertVariant, string> = {
   error: "border-destructive/30 bg-destructive/10 text-destructive",
   success: "border-success/30 bg-success/10 text-success",
+  info: "border-primary/30 bg-primary/10 text-primary",
 };
 
 const VARIANT_ICON: Record<AlertVariant, typeof CircleAlert> = {
   error: CircleAlert,
   success: CircleCheck,
+  info: Info,
 };
 
 export function Alert({ variant, children }: AlertProps) {

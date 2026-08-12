@@ -1,6 +1,7 @@
 "use client";
 
 import { Card } from "@/components/ui/Card";
+import { QrPlaceholderGraphic } from "@/components/ui/QrPlaceholderGraphic";
 import type { DesignConfig } from "@/types/qr-design";
 import type { QRMode, QRType } from "@/types/qr";
 
@@ -26,53 +27,7 @@ export function QRPreviewPanel({ content }: QRPreviewPanelProps) {
   return (
     <Card className="flex flex-col items-center gap-4 p-6">
       <div className="flex aspect-square w-full max-w-[220px] items-center justify-center rounded-lg border border-border bg-background">
-        <svg
-          width="96"
-          height="96"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true"
-          className={filled ? "opacity-100" : "opacity-30"}
-        >
-          <rect x="2" y="2" width="7" height="7" rx="1.5" fill="var(--color-primary)" />
-          <rect
-            x="15"
-            y="2"
-            width="7"
-            height="7"
-            rx="1.5"
-            fill="var(--color-primary)"
-            opacity="0.55"
-          />
-          <rect
-            x="2"
-            y="15"
-            width="7"
-            height="7"
-            rx="1.5"
-            fill="var(--color-primary)"
-            opacity="0.55"
-          />
-          <rect x="15" y="15" width="3" height="3" rx="1" fill="var(--color-primary)" />
-          <rect
-            x="19"
-            y="15"
-            width="3"
-            height="3"
-            rx="1"
-            fill="var(--color-primary)"
-            opacity="0.55"
-          />
-          <rect
-            x="15"
-            y="19"
-            width="3"
-            height="3"
-            rx="1"
-            fill="var(--color-primary)"
-            opacity="0.55"
-          />
-        </svg>
+        <QrPlaceholderGraphic size={96} className={filled ? "opacity-100" : "opacity-30"} />
       </div>
       <p className="text-center text-xs text-muted-foreground">
         {filled

@@ -13,7 +13,9 @@ export const MOCK_QR_CODES: QRCodeSummary[] = [
     mode: "dynamic",
     status: "active",
     scanCount: 482,
+    createdAt: "2026-06-01",
     updatedAt: "2026-08-10",
+    destinationSummary: "menu-v3.pdf",
   },
   {
     id: "2",
@@ -22,7 +24,9 @@ export const MOCK_QR_CODES: QRCodeSummary[] = [
     mode: "static",
     status: "active",
     scanCount: 0,
+    createdAt: "2026-08-05",
     updatedAt: "2026-08-05",
+    destinationSummary: "Ada Lovelace, Analytical Engines Inc",
   },
   {
     id: "3",
@@ -31,7 +35,9 @@ export const MOCK_QR_CODES: QRCodeSummary[] = [
     mode: "static",
     status: "active",
     scanCount: 0,
+    createdAt: "2026-07-28",
     updatedAt: "2026-07-28",
+    destinationSummary: "Network: Store-Guest",
   },
   {
     id: "4",
@@ -40,7 +46,9 @@ export const MOCK_QR_CODES: QRCodeSummary[] = [
     mode: "dynamic",
     status: "paused",
     scanCount: 1204,
+    createdAt: "2026-06-20",
     updatedAt: "2026-07-15",
+    destinationSummary: "https://example.com/summer-sale",
   },
   {
     id: "5",
@@ -49,6 +57,12 @@ export const MOCK_QR_CODES: QRCodeSummary[] = [
     mode: "dynamic",
     status: "archived",
     scanCount: 39,
+    createdAt: "2026-03-01",
     updatedAt: "2026-05-02",
+    destinationSummary: "https://example.com/spring-event",
   },
 ];
+
+export function findMockQrCode(id: string): QRCodeSummary | undefined {
+  return MOCK_QR_CODES.find((qrCode) => qrCode.id === id);
+}

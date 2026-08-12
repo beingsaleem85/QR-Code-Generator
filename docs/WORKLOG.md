@@ -426,3 +426,35 @@ Known issues:
 Next:
 
 - Module 2.7 — QR Detail and Edit UI
+
+## Module 2.7 — QR Detail and Edit UI
+
+Status: COMPLETE
+
+Completed:
+
+- Extracted `src/components/ui/QrPlaceholderGraphic.tsx` from three duplicated inline-SVG copies (`Logo`, `QRPreviewPanel`, `GeneratorTeaser`) — the detail page's large preview needed a fourth copy, which was the actual trigger for the extraction. Placed under `ui/` rather than `qr/` since `layout/Logo` depending on `qr/` would be an odd dependency direction.
+- Extended `src/types/qr-record.ts`'s `QRCodeSummary` with `createdAt`/`destinationSummary`; extended `MOCK_QR_CODES` accordingly and added `findMockQrCode(id)` to `src/lib/qr/mock-data.ts`.
+- Built `/dashboard/qr-codes/[id]` (detail): large preview, name/status/type/mode, destination/content summary, created/updated timestamps, disabled download actions, Edit link, conditional analytics-summary card (dynamic mode only), and a visually separated "Danger zone" with disabled Archive/Delete.
+- Built `/dashboard/qr-codes/[id]/edit`: reuses `QRGeneratorShell` (Module 2.4) directly rather than a parallel edit form, per the master prompt's explicit instruction to reuse generator components. `QRGeneratorShell` gained optional `variant?: "create" | "edit"` and `initialName?: string` props (default behavior unchanged when omitted).
+- Real unsaved-changes tracking: `isDirty` compares every shell field against its initial value; shown via an "Unsaved changes" badge and a `disabled={!isDirty}` "Save Changes" button (edit mode only). A `beforeunload` listener (attached only while dirty) blocks browser close/reload/typed-URL navigation — genuinely tested, not just declared. In-app SPA navigation is explicitly **not** intercepted yet (no simple per-navigation confirm hook in the App Router; disproportionate effort to guard mock data with nothing real at risk before Module 3.5) — documented as a scope boundary, not silently dropped.
+- Fixed `Reset` to restore `initialName` instead of always clearing to `""`, so it means "discard edits since load" correctly in both `create` and `edit` variants.
+- Added a third `Alert` variant (`"info"`) for the edit page's neutral pre-fill note — `"success"` was semantically wrong for a non-completion message.
+
+Verification:
+
+- `npm run typecheck` / `lint` (0 errors, same 8 pre-existing informational warnings) / `format:check` — pass
+- `rm -rf .next && npm run build` — pass, all 25 routes build
+- Added `tests/unit/components/QRGeneratorShellEdit.test.tsx` (6 tests): no dirty indicator/disabled Save Changes pre-edit; both active post-edit; `beforeunload`'s `defaultPrevented` is `true` while dirty and `false` when clean (dispatched manually and asserted, not just declared present); Reset restores `initialName` and clears dirty state; `create` variant shows neither Save Changes nor the indicator. Suite: 65/65 passing, confirmed stable across 2 consecutive full-suite runs.
+- Route content verified via `curl` against the production server: detail pages for a dynamic QR (analytics link present) and a static QR (analytics link absent); edit page shows the info note and "Save Changes".
+- **Investigated, not glossed over**: `curl -i` against a nonexistent id (`/dashboard/qr-codes/999`) returns `HTTP/1.1 200 OK` with correct "not found" content, not a 404 status. Root-caused via Next.js's own bundled docs (`node_modules/next/dist/docs/01-app/02-guides/streaming.md`): once streaming begins — which happens as soon as a `loading.tsx` Suspense boundary renders — the already-sent 200 status can't change. The root `src/app/loading.tsx` (Module 1.1) covers every route, and both pages must `await params` (Next 16 async params) before they can call `notFound()`, so streaming is unavoidably underway first. Fixing this would mean removing/rescoping the app-wide root loading boundary — out of this module's scope, affects every route. Documented in `docs/ARCHITECTURE.md` as a known, understood Next.js limitation rather than claimed as correct or silently ignored.
+
+Known issues:
+
+- `notFound()` returns HTTP 200 instead of 404 on this app (see above) — a documented Next.js streaming constraint, not a Module 2.7 defect. Revisit only if a real requirement (e.g. SEO, monitoring) needs correct 404 status codes, which would require restructuring the root loading boundary.
+- Edit page pre-fills only `name` from mock data — content/design pre-fill needs a real per-QR payload/design record, arriving with persistence in Module 3.5. Stated explicitly to the user via an `Alert`, not silently incomplete.
+- Unsaved-changes guard does not cover in-app SPA navigation (sidebar links) — see above, explicit scope boundary.
+
+Next:
+
+- Module 2.8 — Analytics UI
