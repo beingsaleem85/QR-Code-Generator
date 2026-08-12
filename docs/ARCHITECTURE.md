@@ -1,6 +1,6 @@
 # Architecture
 
-Status: Phase 2 — UI, Module 2.4. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
+Status: Phase 2 — UI, Module 2.5. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
 
 ## Stack
 
@@ -99,7 +99,11 @@ Route group, no URL prefix. Marketing/content pages plus the public generator en
 /login             /(auth)/login/page.tsx
 /signup            /(auth)/signup/page.tsx
 /forgot-password   /(auth)/forgot-password/page.tsx
+/reset-password    /(auth)/reset-password/page.tsx    (added Module 2.5 — set-new-password state)
+/auth/callback     /(auth)/auth/callback/page.tsx      (added Module 2.5 — OAuth/email-confirm loading state)
 ```
+
+`src/app/(auth)/layout.tsx` (Module 2.5) centers every route in this group with the `Logo` above an `AuthCard` — a second group-specific layout alongside `(marketing)`'s, per Module 2.2's note that `(auth)`/`(dashboard)` don't get the marketing header/footer.
 
 ### Authenticated routes — `src/app/(dashboard)/dashboard/`
 
@@ -414,3 +418,34 @@ Manual browser interaction testing in this session's Browser pane (both `next de
 - [x] Preview state exists (empty vs. filled distinguished)
 - [x] Loading/error/empty states designed (inline field errors via RHF+Zod; preview empty state; disabled Save/Download until Phase 3 wires them)
 - [x] No backend completion required yet (validation is client-side/pure, already available since Module 1.3 — no Supabase, no rendering library, no persistence added)
+
+## Authentication UI
+
+Established in Module 2.5. `src/components/auth/` (`AuthCard`, `LoginForm`, `SignupForm`, `ForgotPasswordForm`, `ResetPasswordForm`) plus two new UI primitives used across all four forms: `PasswordInput` (visibility toggle, `src/components/ui/PasswordInput.tsx`) and `Alert` (`src/components/ui/Alert.tsx`, error/success variants — the "error message area" the master prompt calls for).
+
+### No fake social login
+
+Per master prompt §2.5's explicit instruction, there is no social-auth button anywhere in this module — not even a disabled placeholder. Adding one would misrepresent a capability that doesn't exist and isn't currently planned; when/if it's ever built, it can be added deliberately with its own module.
+
+### Honest not-yet-connected state, not fake success
+
+Every form has real client-side validation (React Hook Form + Zod, same pattern as Module 2.4) and a real loading state (a stand-in `setTimeout` delay, since there's no backend yet), but on completion shows an explicit muted note — _"…isn't connected to a backend yet — arrives in Module 3.1"_ — rather than a fake success message. A form-level `Alert` (the "error message area" requirement) is wired into each component (`formError` state → `<Alert variant="error">`) and ready for Module 3.1 to populate from a real failed request; it doesn't render anything today because nothing has actually failed yet. This was a deliberate choice over faking a success/failure outcome, which would misrepresent what the app can currently do.
+
+### A latent Module 2.4 bug found and fixed here
+
+While wiring `PasswordInput` (which needs to forward a ref to the underlying `<input>` for React Hook Form's `register()`), discovered that `Input`, `Textarea`, and `Select` (Module 2.4) were plain function components, not `forwardRef`-wrapped — passing `ref` explicitly failed a `tsc` check outright. Investigating further: RHF's `{...register(...)}` spread _also_ includes a `ref`, but spreading (vs. an explicit `ref=` attribute) bypasses TypeScript's excess-property check, so Module 2.4's forms passed `tsc` silently while still being subtly broken at runtime — `register()`'s ref never actually reached the DOM input, meaning RHF's error-focus-management (focusing the first invalid field) silently didn't work on any Module 2.4 content form. Fixed by converting all three primitives to `forwardRef`; this is a real behavioral fix, not just a Module 2.5 addition, and required no changes to any form component (the `{...register(...)}` call sites were already correct).
+
+### Verification approach
+
+Following the Module 2.4 finding that this session's Browser pane doesn't reliably reflect click-driven state changes, interaction verification here went straight to component tests rather than re-attempting browser clicks: `tests/unit/components/LoginForm.test.tsx` and `SignupForm.test.tsx` cover inline validation (empty/invalid email, short password, mismatched passwords), the password-visibility toggle, and that a valid submission actually enters the loading state. One genuine flake was found and fixed in the process: an early version of these tests waited (via `findByText`) for the post-submit "not connected" note, which depends on a real 500ms `setTimeout` — under the full suite's parallel test load this occasionally exceeded even a 3-second `findByText` timeout. Diagnosed with a temporary forced-failure assertion that dumped the live DOM (confirming the loading state _did_ activate correctly, immediately), then fixed properly: assert on the synchronous loading-state transition instead of waiting on real wall-clock timing. Confirmed stable across 3 consecutive full-suite runs afterward. Route-level content was spot-checked via `curl` against the production server (SSR HTML contains the right headings/labels for all 5 auth routes) rather than the Browser pane, consistent with the same lesson.
+
+### Acceptance status (master prompt §2.5, adapted — no explicit checklist given)
+
+- [x] Login, Signup, Forgot Password, Reset Password, and Auth Callback states all built
+- [x] Clean centered-card layout
+- [x] Email/password controls with a password visibility toggle
+- [x] Client-side validation with inline errors
+- [x] Loading state (real, not just declared — button text/disabled state genuinely changes during the stand-in delay)
+- [x] Error message area (wired, currently dormant — nothing has failed yet since there's no backend)
+- [x] Links between login/signup/recovery
+- [x] No fake social login

@@ -366,3 +366,34 @@ Known issues:
 Next:
 
 - Module 2.5 — Authentication UI
+
+## Module 2.5 — Authentication UI
+
+Status: COMPLETE
+
+Completed:
+
+- Added Zod schemas for login, signup, forgot-password, and reset-password under `src/lib/validation/auth/`.
+- Added `PasswordInput` (visibility toggle) and `Alert` (error/success) UI primitives.
+- Built `AuthCard` (shared centered-card wrapper) and `src/app/(auth)/layout.tsx` (logo + centered content — this route group had no layout at all before).
+- Built `LoginForm`, `SignupForm`, `ForgotPasswordForm`, `ResetPasswordForm` — real React Hook Form + Zod validation, a genuine loading state (stand-in delay), and an honest "not connected to a backend yet" note on completion rather than a fake success/failure. A form-level `Alert` error slot exists in each, wired but dormant (nothing has failed yet since there's no backend).
+- Wired these into the existing `/login`, `/signup`, `/forgot-password` routes, and added two new routes the master prompt's Module 2.5 explicitly calls for that Module 1.2 didn't originally include: `/reset-password` (set-new-password state) and `/auth/callback` (loading state for the OAuth/email-confirm redirect).
+- No social-auth button anywhere — explicit master-prompt instruction, not an oversight.
+- **Found and fixed a latent Module 2.4 bug**: `Input`/`Textarea`/`Select` were plain function components, not `forwardRef`-wrapped. `react-hook-form`'s `{...register(...)}` spread includes a `ref`, but spreading (vs. an explicit `ref=` attribute) bypasses TypeScript's excess-property check — so Module 2.4's forms passed `tsc` while the ref silently never reached the DOM input, meaning RHF's focus-first-invalid-field behavior never actually worked on any Module 2.4 content form. Only surfaced now because `PasswordInput` needed an _explicit_ `ref={ref}`, which `tsc` does check strictly. Fixed all three primitives; no form component needed changes.
+
+Verification:
+
+- `npm run typecheck` / `lint` (0 errors, same 8 pre-existing informational warnings) — pass
+- `rm -rf .next && npm run build` — pass, 25 routes (added `/reset-password`, `/auth/callback`)
+- Added `tests/unit/components/LoginForm.test.tsx` and `SignupForm.test.tsx` — inline validation, password-visibility toggle, and submit-enters-loading-state, following the Module 2.4 precedent of component tests over Browser-pane interaction testing.
+- **Caught and fixed a real test flake during this module**: an early version waited for the post-submit "not connected" note via `findByText`, which depends on a real 500ms `setTimeout` — occasionally exceeded even a 3s timeout under the full suite's parallel load. Diagnosed with a temporary forced-failure assertion dumping the live DOM (confirmed the loading state activates correctly, immediately) rather than assuming; fixed by asserting on the synchronous loading-state transition instead of real wall-clock timing. Confirmed stable across 3 consecutive full-suite runs after the fix.
+- Test suite: 53/53 passing (46 from Module 2.4 + 7 new).
+- Route content spot-checked via `curl` against the production server for all 5 auth routes (200 status, correct heading/label text in the SSR HTML) rather than the Browser pane, per the Module 2.4 lesson.
+
+Known issues:
+
+- None blocking. Forms are UI-only by design — real submission is Module 3.1.
+
+Next:
+
+- Module 2.6 — Dashboard UI

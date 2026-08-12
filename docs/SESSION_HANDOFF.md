@@ -5,11 +5,11 @@ Use this file to resume work without re-deriving context.
 ## Current State
 
 - **Phase:** 2 — UI
-- **Current module:** 2.5 — Authentication UI (not yet started)
-- **Last completed module:** 2.4 — QR Generator UI (COMPLETE)
-- **Branch/commit:** local git repo (`master`). Check `git log --oneline -16` for the actual latest commit when resuming — as of writing, Modules 1.1–2.3 are committed and Module 2.4 is ready to commit.
+- **Current module:** 2.6 — Dashboard UI (not yet started)
+- **Last completed module:** 2.5 — Authentication UI (COMPLETE)
+- **Branch/commit:** local git repo (`master`). Check `git log --oneline -18` for the actual latest commit when resuming — as of writing, Modules 1.1–2.4 are committed and Module 2.5 is ready to commit.
 - **Supabase integration status:** No live/hosted Supabase project. Not needed for any of Phase 2. First live credential need is Module 3.1.
-- **Test status:** 46 unit/component tests passing (41 payload-builder/registry + 5 new `QRGeneratorShell` interaction tests). `typecheck`, `lint` (0 errors), `format:check`, and a fresh production `build` (23 routes) all pass.
+- **Test status:** 53 unit/component tests passing (46 from Module 2.4 + 7 auth-form tests). `typecheck`, `lint` (0 errors), `format:check`, and a fresh production `build` (25 routes) all pass.
 
 ## Relevant Commands
 
@@ -35,37 +35,34 @@ None.
 
 ## ⚠️ Read before doing browser-based verification
 
-**This session's Browser pane cannot be trusted for interaction testing.** In Module 2.4, clicking type-selector/mode-toggle buttons produced no visible state change across `next dev` and `next start`, multiple fresh tabs, with zero console errors — extensive live debugging found no code-level cause (React fiber was attached to `<body>` but absent on every deeper node, including a component previously confirmed working in Module 2.2). This was resolved conclusively by writing a real component test (`tests/unit/components/QRGeneratorShell.test.tsx`, using `@testing-library/react` + `user-event` + `jsdom`) that exercises the same interactions through React's actual event system — all 5 passed, proving the app code was correct and the Browser pane itself was the unreliable part.
+**This session's Browser pane cannot be trusted for interaction testing** (established Module 2.4, held true through Module 2.5). For interaction/behavior verification, write a Vitest + Testing Library component test under `tests/unit/components/` — this is the established, reliable method now, with 12 such tests across 3 components. For content/structure checks, `curl` against the production server (`npm run start`) or the Browser pane's `textContent`/`getComputedStyle` remain trustworthy. Don't trust Browser-pane click simulation, `getBoundingClientRect`, or screenshots this session.
 
-**Going forward:**
+**A second lesson from Module 2.5**: tests that wait on a real `setTimeout` (e.g. a stand-in loading delay) via `findByText`/`findByRole` can flake under the full suite's parallel load even with a generous timeout (3s wasn't always enough for a 500ms delay). Prefer asserting on the _synchronous_ state transition (e.g. the button becomes disabled with loading text) immediately after the triggering interaction, rather than waiting for the delayed completion state. If you must wait on real timing, verify stability with 2-3 consecutive full-suite runs, not just one pass.
 
-- **For interaction/behavior verification** (does clicking X change Y, does a form validate, does state reset correctly): write a Vitest + Testing Library component test under `tests/unit/components/`. This is now the established, reliable method — don't burn time re-litigating the Browser pane for this.
-- **For content/structure/CSS verification** (does the right text render, does a breakpoint's computed style match, did a Tailwind utility compile correctly): the Browser pane's `textContent` and `getComputedStyle` remain trustworthy (established Module 2.3, reconfirmed Module 2.4's diagnostic session) — these don't depend on the same broken mechanism as click-driven interactivity.
-- **For pixel geometry** (screenshots, `getBoundingClientRect`, `scrollHeight`, `offsetTop`): still unreliable — this pane does not composite frames in this session (Module 2.3 finding). Don't trust these.
-- If a future session's Browser pane composites successfully (screenshots work) AND click-driven state changes are visible, both categories above may be trustworthy again — verify that first rather than assuming either way based on this note.
-- `vitest.config.mts`'s test `include` pattern now covers both `**/*.test.ts` and `**/*.test.tsx` — if a new test file's count doesn't show up in the total after adding it, check this first (bit us once already).
+**A latent bug pattern to watch for**: a plain (non-`forwardRef`) component silently accepts `{...someProps}` containing a `ref` without a TypeScript error (spread bypasses excess-property checking), but explicitly writing `ref={x}` on the same component _does_ error. This means spread-based ref passing can silently fail at runtime while `tsc` stays green. `Input`, `Textarea`, `Select`, and now `PasswordInput` are all `forwardRef`-wrapped — keep any new form-field primitive the same way.
 
 ## Next Exact Task
 
-Start Module 2.5 (Authentication UI):
+Start Module 2.6 (Dashboard UI):
 
-1. Build `/login`, `/signup`, `/forgot-password` pages (currently `RouteStub`s under `(auth)/`) with real forms: email/password fields, password visibility toggle, client-side validation (Zod + React Hook Form — same pattern as Module 2.4's content forms), loading state, error message area, links between the three pages.
-2. Use a clean centered-card or split layout — a dedicated `(auth)/layout.tsx` (this group currently has no layout at all, unlike `(marketing)`).
-3. No social auth buttons (master prompt explicitly: don't add fake/non-functional social login).
-4. No actual submission logic yet — Module 3.1 wires real Supabase auth. Forms should validate and show their loading/error states via local component state standing in for what a real submit will eventually do (e.g. a disabled submit button that would call a not-yet-existing server action).
-5. Verify via a component test (per the note above) for at least the login form's validation behavior, plus a browser content/structure check (not interaction) for visual sanity.
-6. Document in `docs/ARCHITECTURE.md`, mark Module 2.5 complete in `docs/WORKLOG.md`, commit. Continue autonomously to Module 2.6 (Dashboard UI) afterward.
+1. Build the authenticated dashboard layout: `DashboardSidebar` + `DashboardHeader` (both already exist as Module 1.6 skeletons under `src/components/dashboard/` — verify they still match current design tokens, update if not) wired into a new `src/app/(dashboard)/layout.tsx` (this group currently has no layout, like `(auth)` didn't before Module 2.5).
+2. Build the Overview screen (`/dashboard`) with stat placeholders (Total QR Codes, Dynamic QR Codes, Total Scans, Scans this period) and a recent-QR-codes list — using mock/local data (no Supabase yet), per Phase 2's charter.
+3. Build out the QR code list (`/dashboard/qr-codes`) using `QRCodeCard`/`QRCodeTable` (existing Module 1.6 components) with mock data, switching between card/table by viewport per master prompt §2.6.
+4. Add a strong empty state (existing `EmptyState` component) for a new user with zero QR codes.
+5. Mobile: sidebar collapses to a drawer — likely reuse the `MobileNavDrawer` pattern from Module 2.2 (native `<dialog>`) rather than building a second drawer implementation from scratch.
+6. Verify via component tests (per the note above) for anything genuinely interactive (drawer toggle, card/table switching if it's JS-driven rather than pure CSS), plus `curl`/content checks for the rest.
+7. Document in `docs/ARCHITECTURE.md`, mark Module 2.6 complete in `docs/WORKLOG.md`, commit. Continue autonomously to Module 2.7 (QR Detail and Edit UI) afterward.
 
 ## Notes for Future Sessions
 
 - Repo root is `D:\AntiGravity\QR`. Next.js app at repo root (not a subfolder).
 - Next.js 16.3.0 — check `node_modules/next/dist/docs/` before assuming v15-era behavior.
 - **Tailwind v4** (`^4.3.3`), CSS-first `@theme` in `src/app/globals.css`. This project's `--radius-sm/md/lg` override Tailwind's own built-in radius scale of the same names — intentional, see "Design System" in `docs/ARCHITECTURE.md`.
-- **Design system**: primary `#0F766E`. Use `Button`/`buttonVariants()`, `Card`, and the new `Input`/`Textarea`/`Select`/`FormField` primitives (`src/components/ui/`) rather than raw markup — Module 2.5's auth forms should reuse these directly.
-- **Forms**: the established pattern (Module 2.4) is React Hook Form + `zodResolver` against a schema from `src/lib/validation/qr/` (or a new schema for auth — there's no login/signup Zod schema yet, add one under `src/lib/validation/` following the same shape) + the `FormField`/`Input` primitives for labels/errors.
-- **lucide-react is v1.31.0** — a major-version package newer than most training data. Verify an icon export name exists (`node -e "console.log(typeof require('lucide-react').IconName)"`) before assuming it, same as Module 2.4 did for all 20 icon keys.
-- **Marketing shell** (Module 2.2): `Header`/`Footer`/`Logo`/`MobileNavDrawer` under `src/components/layout/`, wired via `src/app/(marketing)/layout.tsx` — `(auth)` and `(dashboard)` do not get this shell, they need their own layouts (Module 2.5 adds `(auth)/layout.tsx`; Module 2.6 wires `DashboardSidebar`/`DashboardHeader`).
-- **Component architecture** (Module 1.6): `QRTypeSelector`/`QRContentPanel` read from `qrTypeRegistry` (`src/lib/qr/registry.ts`) — don't hardcode a QR type list.
+- **Design system**: primary `#0F766E`. Use `Button`/`buttonVariants()`, `Card`, `Input`/`Textarea`/`Select`/`FormField`/`PasswordInput`/`Alert` (all under `src/components/ui/`) rather than raw markup.
+- **Forms**: React Hook Form + `zodResolver` against a schema under `src/lib/validation/{qr,auth}/` + the `FormField`/`Input`-family primitives. All form-field primitives must be `forwardRef`-wrapped (see the bug note above).
+- **lucide-react is v1.31.0** — verify an icon export name exists before assuming it (`node -e "console.log(typeof require('lucide-react').IconName)"`).
+- **Marketing shell** (Module 2.2): `Header`/`Footer`/`Logo`/`MobileNavDrawer` under `src/components/layout/`, wired via `(marketing)/layout.tsx`. **Auth shell** (Module 2.5): `AuthCard` under `src/components/auth/`, wired via `(auth)/layout.tsx`. `(dashboard)` still has no layout — that's next.
+- **Component architecture** (Module 1.6): `QRTypeSelector`/`QRContentPanel` read from `qrTypeRegistry` (`src/lib/qr/registry.ts`) — don't hardcode a QR type list. `DashboardSidebar`'s nav items already match the real Module 1.2 route map.
 - **Local Supabase via Docker works on this machine** — `supabase/config.toml` exists, ports `54321`–`54329`. `supabase start` on an existing volume does **not** auto-apply new migrations — use `supabase db reset` after adding one.
 - RLS design intentionally leaves two gaps that are **not bugs**: `qr_codes` has no `anon` SELECT policy, `qr_scan_events` has no client-facing INSERT policy at all.
 - On this machine, port 3000 is sometimes already in use by an unrelated project (`D:\AntiGravity\LMS`). Next.js auto-falls-back to 3001 — check the actual port before assuming, and never stop a process on 3000 without confirming its PID belongs to this project first.
