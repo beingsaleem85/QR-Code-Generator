@@ -1,6 +1,6 @@
 # Architecture
 
-Status: Phase 2 — UI, Module 2.6. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
+Status: Phase 2 — UI, Module 2.8. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
 
 ## Stack
 
@@ -521,3 +521,48 @@ Visiting `/dashboard/qr-codes/999` (a nonexistent id) correctly renders the `not
 - [x] Unsaved-changes state shown
 - [x] Clear Save Changes action
 - [x] Confirm navigation if changes would be lost — real for browser close/reload/typed-URL nav (`beforeunload`, tested); in-app SPA navigation intentionally not intercepted yet (documented above, not silently dropped)
+
+## Analytics UI
+
+Established in Module 2.8, at `/dashboard/qr-codes/[id]/analytics` (previously a `RouteStub`). Only shows real analytics for `mode === "dynamic"` QR codes; a static QR code renders an informative `Alert` ("Static QR codes don't track scans...") instead — reachable only by direct URL, since Module 2.7's detail page only links here for dynamic codes.
+
+### What's shown, and what deliberately isn't
+
+The master prompt lists "Unique/estimated unique scans if methodology supports it" as a summary card — **omitted here**, and this is a scope decision, not an oversight: `qr_scan_events` (Module 1.4) stores no raw IP and only an optional salted `ip_hash`, populated solely when a documented legal/product need exists (see the Database Schema section above). With no default per-visitor identifier, there is no honest way to dedupe "unique" scans from the event stream — and the master prompt is explicit: "Do not display analytics metrics that the backend will not actually collect." `src/types/analytics.ts` documents this directly on the `QrScanEvent` type so a future `visitorId`/`isUnique` field isn't added without first adding a real identifier column to back it.
+
+The master prompt's filter list also includes "QR code" — omitted here since this page is already scoped to one QR code by its route; that filter only makes sense on a hypothetical global analytics view, which isn't part of the current dashboard nav (`DASHBOARD_NAV_ITEMS`) or master prompt scope. Date range (24h/7d/30d) and country/device filters are implemented and functional.
+
+### Architecture: pure aggregation vs. mock data, kept separate
+
+`src/lib/analytics/aggregate.ts` holds pure, data-source-agnostic functions (`filterEventsByRange`, `countScansOverTime`, `countByField`, `countByHour`) operating on `QrScanEvent[]` — deliberately separated from `src/lib/qr/mock-data.ts` so this logic is reused unchanged once Module 3.7 wires real `qr_scan_events` rows; only the data source swaps, not the math. All bucketing is UTC-based specifically because this data renders inside a Client Component (`AnalyticsView`, `"use client"`) — a locale-dependent day/hour boundary would make the server-rendered and client-hydrated HTML disagree.
+
+Mock data itself (`MOCK_ANALYTICS_NOW`, per-QR-code `MOCK_SCAN_EVENTS`, `getMockScanEvents()`) lives in `mock-data.ts` alongside `MOCK_QR_CODES`, hand-authored in the same deterministic-array style as the rest of that file (not procedurally generated) — a representative _recent-activity sample_ per dynamic QR code, not a literal 1:1 replay of the existing `scanCount` lifetime totals (482/1204/39) shown elsewhere. `MOCK_ANALYTICS_NOW` is a fixed reference timestamp (`2026-08-12T12:00:00.000Z`) rather than the real current time, so every "last 24h/7d/30d" number stays meaningful and reproducible regardless of when the app is actually loaded — the same reasoning already applied to the plain-string `createdAt`/`updatedAt` dates on `MOCK_QR_CODES`.
+
+A 6th mock QR code ("Referral Program", dynamic, `scanCount: 0`) was added specifically to exercise the _true_ "No scans yet" empty state (master prompt's suggested exact copy), which is distinct from — and rendered differently than — a QR code with real lifetime scans but none inside the currently selected filter window ("Old Flyer Link", archived, all its sample events fall outside every filter range): the former skips filters/charts entirely, the latter still shows filters (the user might want to broaden the range) with each chart individually reporting "No scans in this range".
+
+### Components
+
+- `AnalyticsSummaryCards` (Module 1.6, already token-based, unchanged): Total scans (lifetime, from `qrCode.scanCount`), Last 24h/7d/30d, Top country, Top device — all computed from the _full_ event history regardless of the active filter, so the top-line numbers stay stable while a user explores different date ranges below.
+- `AnalyticsFilters` (migrated off Module 1.6's `gray-*` placeholder colors onto design tokens, rewritten from a display-only stub into a real controlled component): date-range buttons (`aria-pressed`) plus country/device `Select` dropdowns, options derived from that QR code's own event data.
+- `AnalyticsChartShell` (token-migrated): unchanged empty-state behavior when `children` is omitted (still used exactly as before, with no `children`, by the Module 2.3 marketing homepage teaser) — `AnalyticsView` opts into real content only when data exists for the current filter.
+- `BarChart` (new): hand-rolled CSS/flexbox bar chart (no charting library added, consistent with this project's existing hand-rolled SVG assets like `QrPlaceholderGraphic`) — used for both "Scans over time" and "Hour of day", each `role="img"` with an `aria-label` summary and native `title` tooltips per bar.
+- `DistributionList` (new): horizontal bar + percentage list — used for country, device type, and OS/browser breakdowns.
+- `AnalyticsView` (new, `"use client"`): owns date-range/country/device filter state, derives every aggregate via `useMemo`, and branches between the true-empty state, the range-empty state (each chart independently), and full charts.
+
+### Verification approach
+
+`tests/unit/analytics/aggregate.test.ts` (8 tests) covers the pure aggregation functions directly — range filtering boundaries, zero-filled day buckets, sorted/percentaged distributions, hour bucketing — independent of any UI. `tests/unit/components/AnalyticsView.test.tsx` (5 tests) covers the actual interactive behavior: the true-empty vs. range-empty distinction, summary cards staying constant while switching date ranges, the default 7d range, and the country filter narrowing chart content. Route content spot-checked via `curl` against the production server for a populated dynamic QR (id `1`), a static QR (id `2`, confirms the "doesn't track scans" message and that no chart UI renders), a zero-scan dynamic QR (id `6`, confirms "No scans yet"), and a nonexistent id (confirms the already-documented `notFound()`/200-status behavior from Module 2.7 applies here too, since this page follows the same `await params` → lookup → `notFound()` pattern).
+
+### Acceptance status
+
+- [x] Summary cards: total scans, last 24h/7d/30d, top country, top device
+- [ ] Unique/estimated unique scans — deliberately omitted, methodology not supported by the current schema (see above)
+- [x] Scans-over-time chart
+- [x] Country distribution chart
+- [x] Device type chart
+- [x] Browser/OS chart
+- [x] Hour-of-day breakdown chart
+- [x] Date range filter
+- [ ] QR code filter — deliberately omitted, redundant on this per-QR-code-scoped page (see above)
+- [x] Country/device filters
+- [x] "No scans yet" empty state, and a distinct "no scans in this range" state for QR codes with real history outside the current filter

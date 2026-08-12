@@ -458,3 +458,36 @@ Known issues:
 Next:
 
 - Module 2.8 — Analytics UI
+
+## Module 2.8 — Analytics UI
+
+Status: COMPLETE
+
+Completed:
+
+- Added `src/types/analytics.ts` (`QrScanEvent`, `AnalyticsDateRange`, `DistributionEntry`, `DayCount`) and `src/lib/analytics/aggregate.ts` — pure, data-source-agnostic functions (`filterEventsByRange`, `countScansOverTime`, `countByField`, `countByHour`) kept separate from mock data specifically so this logic carries over unchanged when Module 3.7 wires real `qr_scan_events` rows. All bucketing is UTC-based to avoid server/client hydration mismatches in the Client Component that consumes it.
+- Extended `src/lib/qr/mock-data.ts` with `MOCK_ANALYTICS_NOW` (a fixed reference timestamp, not the real current time, for reproducible last-24h/7d/30d numbers) and `MOCK_SCAN_EVENTS`/`getMockScanEvents()` — a hand-authored, deterministic _recent-activity sample_ per dynamic QR code, not a literal replay of the existing lifetime `scanCount` totals. Added a 6th mock QR code ("Referral Program", dynamic, 0 scans) specifically to exercise the true "No scans yet" empty state, distinct from a QR code with real history but nothing inside the current filter window (id `5`, already archived with only old events).
+- Replaced the `/dashboard/qr-codes/[id]/analytics` `RouteStub` with a real page: static-mode QR codes get an informative `Alert` ("Static QR codes don't track scans...") instead of empty/fake analytics; dynamic-mode QR codes render the new `AnalyticsView`.
+- Migrated the Module 1.6 `AnalyticsFilters`/`AnalyticsChartShell` skeletons off `gray-*` placeholder classes onto design tokens; rewrote `AnalyticsFilters` from a display-only stub into a real controlled component (date-range buttons with `aria-pressed`, country/device `Select` filters). Left `AnalyticsSummaryCards` untouched (already token-based) and `AnalyticsChartShell`'s no-`children` empty-state behavior unchanged, since the Module 2.3 marketing homepage teaser still relies on it exactly as-is.
+- Built `BarChart` and `DistributionList` (new, `src/components/analytics/`) — hand-rolled CSS/flexbox charts, no charting library added, matching this project's existing preference for small hand-rolled visuals over a new dependency (`QrPlaceholderGraphic` precedent).
+- Built `AnalyticsView` (new, `"use client"`): owns date-range/country/device filter state, derives every aggregate via `useMemo`, and renders 5 chart cards (scans over time, hour of day, country, device type, browser & OS) plus 6 always-on summary cards (total, last 24h/7d/30d, top country, top device — computed from full history, unaffected by the active filter).
+- **Deliberately did not implement** two items from the master prompt's Module 2.8 spec: "Unique/estimated unique scans" (the `qr_scan_events` schema stores no default per-visitor identifier — only an optional salted `ip_hash` populated when a documented legal/product need exists — so there's no honest way to dedupe a unique scan; the master prompt itself says not to display metrics the backend won't actually collect) and a "QR code" filter (redundant — this page is already scoped to one QR code by its route; no global analytics view exists in the current nav to make that filter meaningful). Both omissions are documented in `docs/ARCHITECTURE.md` as explicit scope decisions, not gaps.
+
+Verification:
+
+- `npm run typecheck` / `lint` (0 errors, same 8 pre-existing informational warnings) / `format:check` — pass
+- `rm -rf .next && npm run build` — pass, all 25 routes build (route count unchanged, `[id]/analytics` was already counted as a dynamic route via its `RouteStub`)
+- Added `tests/unit/analytics/aggregate.test.ts` (8 tests, plain Vitest, no DOM): range-filtering boundaries at each of 24h/7d/30d, zero-filled chronological day buckets, distribution sorting/percentages, hour-of-day bucketing.
+- Added `tests/unit/components/AnalyticsView.test.tsx` (5 tests): true-empty state (0 lifetime scans, no filters rendered) vs. range-empty state (real history, nothing in the active window); summary cards reflect full history independent of the active date-range filter; default range is 7d and switching to 24h updates `aria-pressed` correctly; the country filter narrows the country-distribution chart's content.
+- Suite: 78/78 passing, confirmed stable across 2 consecutive full-suite runs.
+- Route content verified via `curl` against the production server: a populated dynamic QR (id `1`, full analytics UI), a static QR (id `2`, info message only, no chart UI), a zero-scan dynamic QR (id `6`, "No scans yet"), and a nonexistent id (`999`, confirms the Module 2.7 `notFound()`/HTTP-200 finding applies identically here, since this page follows the same `await params` → lookup → `notFound()` shape).
+
+Known issues:
+
+- `notFound()` returns HTTP 200 here too, for the same documented reason as Module 2.7 (root `loading.tsx` Suspense boundary + async `params`).
+- "Unique scans" and the "QR code" filter are intentionally not implemented — see above, not defects.
+- Chart interactivity (hover tooltips) relies on native `title` attributes rather than a custom tooltip component — acceptable for Phase 2 mock data; revisit only if real usage shows it's insufficient.
+
+Next:
+
+- Module 2.9 — Account, Files, Settings UI

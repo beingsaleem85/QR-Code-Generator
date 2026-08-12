@@ -3,20 +3,27 @@ import type { ReactNode } from "react";
 interface AnalyticsChartShellProps {
   title: string;
   children?: ReactNode;
+  emptyLabel?: string;
 }
 
 /**
- * Structure-phase wrapper for a chart. Real charts (scans over time,
- * country/device/browser distribution) are built in Module 2.8, backed
- * by real data in Module 3.7.
+ * `children` omitted renders the dashed empty-state box (used as-is by the
+ * Module 2.3 marketing homepage teaser, which never has real data to show).
+ * Module 2.8's `AnalyticsView` passes real chart content once data exists.
  */
-export function AnalyticsChartShell({ title, children }: AnalyticsChartShellProps) {
+export function AnalyticsChartShell({
+  title,
+  children,
+  emptyLabel = "No scans yet",
+}: AnalyticsChartShellProps) {
   return (
-    <div className="rounded-md border border-gray-200 p-4">
-      <p className="mb-2 text-sm font-medium text-gray-900">{title}</p>
-      <div className="flex h-40 items-center justify-center rounded-md border border-dashed border-gray-300 text-xs text-gray-500">
-        {children ?? "No scans yet"}
-      </div>
+    <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
+      <p className="mb-3 text-sm font-medium text-foreground">{title}</p>
+      {children ?? (
+        <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-border text-xs text-muted-foreground">
+          {emptyLabel}
+        </div>
+      )}
     </div>
   );
 }
