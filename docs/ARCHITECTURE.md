@@ -1,6 +1,6 @@
 # Architecture
 
-Status: Structure phase, Module 1.1. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
+Status: Phase 2 — UI, Module 2.1. This document grows with each module; sections below marked "TBD" are filled in by their corresponding module.
 
 ## Stack
 
@@ -294,3 +294,36 @@ Established in Module 1.1:
 - `src/app/loading.tsx` — route-segment loading fallback
 
 These are neutral/unstyled skeletons for now; visual polish happens in Phase 2 (UI).
+
+## Design System
+
+Established in Module 2.1 (Phase 2 — UI). An original visual identity, not a QR.io clone: modern SaaS, light, spacious, trustworthy. Primary is a deep teal (`#0F766E`) — deliberately distinct from the generic blue/violet most SaaS and QR tools default to, while still reading as calm and professional rather than playful.
+
+### Tokens (`src/app/globals.css`)
+
+Tailwind 4 uses CSS-first configuration: tokens are plain CSS custom properties on `:root`, re-declared inside `@theme inline` so Tailwind generates matching utility classes automatically (`--color-primary` → `bg-primary`/`text-primary`/`border-primary`, etc.). Semantic color tokens: `background`, `surface`, `foreground`, `muted-foreground`, `border`, `primary` (+ `primary-hover`, `primary-foreground`), `destructive` (+ `destructive-foreground`), `success`, `warning`, `focus-ring`.
+
+**Important Tailwind v4 detail:** the `--radius-sm`/`--radius-md`/`--radius-lg` tokens defined here **override Tailwind's own built-in default radius scale** (v4 ships with its own `--radius-*` namespace, and redefining the same names in `@theme` replaces them project-wide) — confirmed by inspecting the compiled CSS, not assumed. This means every `rounded-sm`/`rounded-md`/`rounded-lg` utility anywhere in the app automatically uses this project's moderate-radius values (8px/12px), not Tailwind's defaults, without needing a custom class name at every call site. `--control-height-sm/md/lg` (2rem/2.5rem/3rem) map to Tailwind's standard `h-8`/`h-10`/`h-12` — components use those standard utilities directly rather than an arbitrary-value CSS-var syntax, since that syntax's exact v4 semantics weren't worth risking on an unverified assumption when the standard scale already matched.
+
+### Accessibility baked into the tokens, not bolted on after
+
+- Every token combination actually used for text-on-background was checked against WCAG contrast math (not eyeballed): primary-on-white 5.47:1, foreground-on-background 16.98:1, muted-foreground-on-white 4.83:1, destructive-on-white 4.83:1 — all clear AA for normal text (4.5:1 minimum).
+- `--color-focus-ring` was originally a lighter teal that measured 2.49:1 against white — below the 3:1 non-text-contrast minimum for a focus indicator (WCAG 1.4.11) — and was corrected to reuse the primary color (5.47:1) instead of shipping a focus ring that's technically present but hard to see.
+- A global `*:focus-visible { outline: 2px solid var(--color-focus-ring); ... }` rule in `globals.css` gives every interactive element a visible focus state without relying on (inconsistent) browser defaults or per-component styling.
+- A global `prefers-reduced-motion: reduce` block collapses animation/transition durations to near-zero.
+- Dark mode is intentionally out of scope for this module — the master build prompt's visual direction (§2.1) describes a light-surface/white-card aesthetic and never asks for a dark theme; shipping a half-finished dark palette would violate more of the "accessible, consistent" requirement than it would satisfy.
+
+### Core primitives (`src/components/ui/`)
+
+`Button` (variants: primary/secondary/destructive/ghost; sizes: sm/md/lg) and `Card` were added as the first two real primitives. `Placeholder` (from Module 1.6) was migrated from hardcoded `gray-*` classes to the new semantic tokens — since roughly 15 Module 1.6 skeleton components render through `Placeholder` internally, this one change propagated the new design system across the generator content panel, all five design-control sections, the preview panel, and the analytics chart shell without touching each of them individually. `QRDownloadActions` was migrated from raw `<button>` markup to the new `Button` primitive, as a second, more direct proof point.
+
+### Verified, not just built
+
+Confirmed in the compiled production CSS (not just assumed from the source) that `bg-primary`, `text-primary-foreground`, `hover:bg-primary-hover`, and `border-border` all generated real rules referencing the right custom properties. Confirmed live in a running production server + browser session that the "Save QR" button computes to the exact primary color (`rgb(15, 118, 110)` = `#0F766E`) with white text and the intended radius, that the `Placeholder` component's border resolves to the `border` token color in dashed style, and that the `:focus-visible` and `prefers-reduced-motion` rules both compiled with the correct selectors and values.
+
+### Acceptance status
+
+- [x] Design tokens centralized (`globals.css`, single source of truth)
+- [x] Core primitives render consistently (`Button`, `Card`, `Placeholder` — verified via compiled CSS and a live browser session)
+- [x] Desktop example works (`/qr-generator`, verified live); mobile/tablet pass is Module 2.10's dedicated responsive audit, not re-litigated per-module
+- [x] No inaccessible low-contrast primary controls (contrast math above; focus-ring corrected after measuring it, not assumed correct)

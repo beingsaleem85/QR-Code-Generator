@@ -11,9 +11,9 @@ interface PlaceholderProps {
  */
 export function Placeholder({ label, description, className }: PlaceholderProps) {
   return (
-    <div className={`rounded-md border border-dashed border-gray-300 p-4 ${className ?? ""}`}>
-      <p className="text-sm font-medium text-gray-700">{label}</p>
-      {description ? <p className="mt-1 text-xs text-gray-500">{description}</p> : null}
+    <div className={`rounded-lg border border-dashed border-border p-4 ${className ?? ""}`}>
+      <p className="text-sm font-medium text-foreground">{label}</p>
+      {description ? <p className="mt-1 text-xs text-muted-foreground">{description}</p> : null}
     </div>
   );
 }

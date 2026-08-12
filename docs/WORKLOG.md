@@ -234,3 +234,36 @@ Full detail in `docs/ARCHITECTURE.md` → "Route Architecture".
 ### PHASE GATE: PASSED
 
 Phase 1 (Structure) is complete and verified. Proceeding to **Phase 2 — UI**, starting with Module 2.1 (Visual Design System).
+
+## Module 2.1 — Visual Design System
+
+Status: COMPLETE
+
+Completed:
+
+- Established an original visual identity (deliberately not a QR.io clone): deep teal primary (`#0F766E`), light neutral surfaces, moderate radii, subtle shadows — modern SaaS, spacious, trustworthy, per master prompt §2.1.
+- Defined semantic design tokens in `src/app/globals.css` using Tailwind 4's CSS-first `@theme inline` configuration: `background`/`surface`/`foreground`/`muted-foreground`/`border`, `primary`(+hover/foreground), `destructive`(+foreground), `success`, `warning`, `focus-ring`, plus radius/shadow/control-height/transition tokens.
+- Discovered (by inspecting compiled CSS, not assuming) that this project's `--radius-sm/md/lg` tokens override Tailwind v4's own built-in radius scale of the same names — meaning every `rounded-*` utility in the app automatically picks up the project's moderate-radius values project-wide, documented in `docs/ARCHITECTURE.md`.
+- Ran actual WCAG contrast math (not eyeballed) on every token pairing used for text; caught and fixed a focus-ring color that measured 2.49:1 (below the 3:1 non-text-contrast minimum) by reusing the primary color (5.47:1) instead.
+- Added global `*:focus-visible` and `prefers-reduced-motion: reduce` rules.
+- Added `Button` (4 variants × 3 sizes) and `Card` primitives under `src/components/ui/`.
+- Migrated `Placeholder` (used internally by ~15 Module 1.6 skeleton components) and `QRDownloadActions` to the new tokens/primitives as proof points, without doing a full visual pass across every page yet (that's Modules 2.2–2.9, page by page).
+- Documented the full token system, the v4 override discovery, and the accessibility reasoning in `docs/ARCHITECTURE.md` under "Design System".
+
+Verification:
+
+- `npm run typecheck` — pass
+- `npm run lint` — pass
+- `npm run test` — pass, 41/41 (unaffected by this module)
+- `rm -rf .next && npm run build` — clean production build
+- Inspected the compiled production CSS directly and confirmed `bg-primary`, `text-primary-foreground`, `hover:bg-primary-hover`, `border-border`, the `:focus-visible` rule, and the `prefers-reduced-motion` rule all generated correctly with the intended values — not just assumed from source.
+- Live browser verification against the **production** server: the "Save QR" button computes to `rgb(15, 118, 110)` (`#0F766E`) background with white text; `Placeholder`'s border resolves to the `border` token color (`rgb(229, 231, 235)`) in dashed style. Server stopped cleanly afterward.
+
+Known issues:
+
+- None blocking. Full visual/responsive pass across every page is intentionally deferred to Modules 2.2–2.10, per this module's own scope ("a few existing structural components as proof," not a full pass).
+- Dark mode intentionally out of scope — not required by the master prompt's visual direction for this module.
+
+Next:
+
+- Module 2.2 — Public Header, Footer, and Marketing Shell
