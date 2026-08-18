@@ -1029,3 +1029,56 @@ Verified live, not just by reading the policy: signed in as the real permanent a
 - New tests: `entitlements.test.ts` (7) — free-for-unauthenticated, free-for-missing-row, real pro/lifetime mapping, free-on-query-error, and `planLabel()`'s three label cases.
 - `npm run typecheck`/`lint`/`format:check`/`build` — all pass (folded into the same verification pass as Module 3.7 below).
 - **Live verification against the real Supabase project**: account created and confirmed (`confirmed_at`/`email_confirmed_at` both set), `profiles` row present, `account_entitlements` row present with the exact required values, login with the real password succeeds, logout-then-login-again succeeds, and all four RLS-bypass attempts above failed exactly as intended. Confirmed a second time, after all Module 3.7 test-data cleanup ran, that the account/profile/entitlement were all still fully intact — cleanup queries never touched anything but the specific throwaway ids created for that module's own verification.
+
+## Dynamic QR Quota — Unlimited for the Permanent Account
+
+A follow-up out-of-band request: the permanent account needs to create dynamic QR codes with no plan-level cap, enforced server-side (never a frontend `if (user.email === ...)` special case), extending the entitlement system above rather than building a second one.
+
+### Schema: `dynamic_qr_limit`, NULL is the domain value for "unlimited"
+
+`supabase/migrations/20260819150000_add_dynamic_qr_limit.sql` adds `account_entitlements.dynamic_qr_limit integer` (nullable, `check (dynamic_qr_limit is null or dynamic_qr_limit >= 0)`). `NULL` means unlimited — an explicit domain concept, not a magic sentinel like `-1` or `999999999`, so no call site needs a special case to recognize "no limit." The implicit "free" entitlement (no row at all — see above) also resolves `dynamicQrLimit: null` for now: **no commercial free-tier cap has been decided anywhere in this project**, so introducing a real numeric limit for ordinary users would be inventing a product decision, not implementing one. The enforcement mechanism below is fully real and fully wired; there is simply nothing configured yet for it to restrict, by design, until a future pricing decision sets a finite limit on some plan.
+
+### The resolver: one pure function, one server-side call site
+
+`resolveDynamicQrAllowance(entitlement, currentCount)` (`src/lib/account/entitlements.ts`) is a pure function — `{ allowed, limit }` — with no I/O, trivially unit-testable including the "very high count against an unlimited entitlement" case the request specifically asked not to test by inserting real rows for. `checkDynamicQrAllowance()` (`src/lib/qr/actions.ts`) wraps it with the actual DB reads: it reads the caller's entitlement, and **only queries the current dynamic-QR count when the limit is finite** — skipping a query entirely for the common (today: universal) unlimited case, per the request's own "count applicable existing Dynamic QR codes only if the plan has a finite limit" instruction.
+
+This is called from every place a dynamic QR row can newly come into existence:
+
+- `saveQrCode` — creating a new dynamic QR.
+- `updateQrCode` — **only** when the edit is what actually converts an existing static QR to dynamic (`existing.mode !== "dynamic" && input.mode === "dynamic"`). An already-dynamic QR being merely edited never re-triggers the check — blocking edits to a QR you already own because you're "at your limit" would be pointless and hostile, not a real quota concern.
+- `duplicateQrCode` — duplicating a dynamic QR creates a new dynamic row, consuming a slot exactly like a fresh save.
+
+The client never decides any of this — `saveQrCode`/`updateQrCode`/`duplicateQrCode` are Server Actions, and the generator UI has no pre-emptive quota logic of its own. A rejection surfaces through the exact same generic `saveError` `Alert` the shell already uses for validation failures (Module 3.5) — no new "upgrade" UI, no disabled Create button, no quota-exceeded modal, per the request's explicit "do not show an upgrade prompt/disable Save/show quota errors preemptively for this account" instruction (which, since nothing has a finite limit configured today, currently applies to every account, not just the permanent one).
+
+### Active + paused count against a finite limit; archived doesn't
+
+Documented choice, since the request explicitly asked for one: `countDynamicQrCodes()` (`src/lib/qr/queries.ts`) counts dynamic QRs with `status != 'archived'` — active **and** paused both count, only archived is excluded. Archiving is already this app's documented, non-destructive "free up room" mechanism (Module 3.5's dashboard-list-hiding behavior) and it does double duty here rather than inventing a second "this doesn't count" concept. A paused QR still physically exists and could be reactivated at any moment, so letting it silently stop counting would let a finite-plan account exceed its real limit just by pausing everything. This distinction is irrelevant to the permanent account specifically (its limit is `null`, so counting never runs at all regardless of how many QRs are active/paused/archived) but was verified live for a finite-limit account regardless (below).
+
+### UI: no fake progress bar
+
+`/dashboard/account`'s Plan card gained a "Dynamic QR codes" row: `Unlimited` when `dynamicQrLimit === null`, otherwise `{count} / {limit}`. Never renders a `5 / 100`-style meter for an unlimited account, per the request's explicit instruction.
+
+### Verification
+
+- New tests: `entitlements.test.ts` (+4, `resolveDynamicQrAllowance` — under/at/over a finite limit, and unlimited with a very high count, all mocked — no thousands of real rows inserted), `actions.test.ts` (+6 across `saveQrCode`/`updateQrCode`/`duplicateQrCode` — finite-limit reject, finite-limit allow, unlimited skips the count query entirely, mode-conversion-only triggers the check, already-dynamic edits don't re-check), `queries.test.ts` (+3, `countDynamicQrCodes`).
+- `npm run typecheck`/`lint`/`format:check`/`build` — all pass.
+- `npm run test` — **293/293 passing**.
+- **Live verification against the real Supabase project, driving the actual `saveQrCode` Server Action** (not just direct SQL): the Browser pane's client JS wasn't compositing this session on the generator page (the same known, previously-documented limitation from earlier modules) — rather than fake a manual click-through, a temporary, uncommitted Route Handler was added that called `saveQrCode` directly inside a real Next.js request (so `cookies()`/RLS/the real session all applied genuinely), invoked via `fetch()` from the one page that _did_ render, and deleted before this commit (confirmed via `git status` — no trace remains).
+  - A throwaway account with `dynamic_qr_limit = 1`: first dynamic QR created successfully; a second was rejected with the real user-facing limit message; archiving the first freed the slot (a third create then succeeded); pausing the new one still counted against the limit (a fourth create was rejected again) — confirms the active+paused-counts/archived-doesn't design live, not just in mocks.
+  - The permanent account: created two dynamic QRs back to back with no rejection, proving the unlimited path live.
+  - Client-side tampering: the throwaway account's own attempt to set its `dynamic_qr_limit` to `null` affected 0 rows; its attempt to set the permanent account's `dynamic_qr_limit` to `0` also affected 0 rows — RLS's zero-write-policy design (above) already covers the new column with no additional policy needed.
+  - `/r/[slug]` and scan analytics both re-verified working unchanged: one of the permanent account's new test QRs was fetched through the real redirect route and produced both a real 30x redirect and a real `qr_scan_events` row.
+  - Cleanup: all test QR codes (both accounts) and the throwaway account deleted; confirmed afterward that exactly one `auth.users` row remains (the permanent account) and `qr_codes` is empty.
+
+### Acceptance status
+
+- [x] `mts.pk@hotmail.com` has unlimited Dynamic QR codes — no count/monthly/yearly cap, no expiry, no subscription dependency
+- [x] Enforcement is entirely server-side (Server Actions); no frontend email-based special case anywhere
+- [x] Reusable for future finite plans — the exact same resolver and call sites work correctly for any finite `dynamic_qr_limit`, verified live with a real throwaway account
+- [x] Active + paused Dynamic QRs count against a finite limit; archived does not — documented and live-verified
+- [x] Paused/archived QRs never reduce the permanent account's availability (moot for it specifically, since its limit is `null`)
+- [x] Dashboard shows "Unlimited" for this account, never a fabricated `x / y` meter
+- [x] Generator UI shows no upgrade prompt, disabled Save, or quota error for this account
+- [x] Browser cannot set `dynamic_qr_limit`/`is_lifetime`/`plan`; RLS confirmed live for both self- and cross-user attempts
+- [x] No security control weakened — open-redirect/URL-safety checks, RLS elsewhere, and rate limiting (none added, none removed) are all unrelated and untouched
+- [x] Live-verified against the real Supabase project with throwaway test data, fully cleaned up; permanent account confirmed intact throughout and afterward

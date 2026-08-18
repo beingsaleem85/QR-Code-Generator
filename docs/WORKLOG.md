@@ -807,3 +807,27 @@ Verification:
 Known issues:
 
 - None. Billing/upgrade UI is explicitly out of scope per the request — only the entitlement primitive and a read-only status badge exist.
+
+## Dynamic QR Quota — Unlimited for the Permanent Account
+
+Status: COMPLETE (out-of-band follow-up request, not a numbered master-prompt module)
+
+Completed:
+
+- New migration `20260819150000_add_dynamic_qr_limit.sql`: `account_entitlements.dynamic_qr_limit integer` (nullable — `NULL` is the explicit domain value for "unlimited," not a magic sentinel). The implicit free entitlement also resolves unlimited for now, since no commercial free-tier cap has been decided anywhere in this project yet — the enforcement mechanism is fully real, there's just nothing configured for it to restrict.
+- `resolveDynamicQrAllowance()` (pure, `src/lib/account/entitlements.ts`) + `checkDynamicQrAllowance()` (`src/lib/qr/actions.ts`, does the actual DB reads, skips the count query entirely when unlimited) — wired into `saveQrCode`, `updateQrCode` (only on a static→dynamic conversion, never on an already-dynamic edit), and `duplicateQrCode` (only when duplicating a dynamic QR).
+- `countDynamicQrCodes()` (`src/lib/qr/queries.ts`): active + paused count against a finite limit, archived doesn't — documented choice, mirrors archiving's existing role as this app's non-destructive "free up room" mechanism.
+- Explicitly set the permanent account's `dynamic_qr_limit = null` (already the column default, but confirmed via an explicit, auditable `UPDATE`).
+- `/dashboard/account`'s Plan card gained a "Dynamic QR codes" row — `Unlimited`, or `{count} / {limit}` for a finite plan; never a fabricated meter for an unlimited account.
+- All enforcement is server-side (Server Actions) — no frontend email-based special case anywhere.
+
+Verification:
+
+- New tests (13): `entitlements.test.ts` (+4, `resolveDynamicQrAllowance`), `actions.test.ts` (+6), `queries.test.ts` (+3, `countDynamicQrCodes`).
+- `npm run typecheck`/`lint`/`format:check`/`build` — pass.
+- `npm run test` — **293/293 passing**.
+- **Live verification, driving the real `saveQrCode` Server Action** (the Browser pane's client JS wasn't compositing the generator page this session — a temporary, uncommitted Route Handler called `saveQrCode` directly inside a real Next.js request instead, deleted before this commit): a throwaway account with a finite limit of 1 could create one dynamic QR, was rejected creating a second, could create a third after archiving the first (frees the slot), and was rejected again after pausing the new one (paused still counts). The permanent account created two dynamic QRs back to back with no rejection. Both self- and cross-user attempts to modify `dynamic_qr_limit` from the client affected 0 rows. `/r/[slug]` and scan analytics both re-verified working via one of the permanent account's test QRs. All test data and the throwaway account deleted afterward; confirmed exactly one `auth.users` row (the permanent account) and zero `qr_codes` rows remain.
+
+Known issues:
+
+- None. Full details, including the exact live-verification sequence, are in `docs/ARCHITECTURE.md`'s "Dynamic QR Quota" section.

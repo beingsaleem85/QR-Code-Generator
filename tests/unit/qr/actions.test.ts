@@ -103,13 +103,16 @@ describe("saveQrCode", () => {
   it("generates a slug for dynamic mode, none for static", async () => {
     const client = mockSupabase({
       user: mockUser,
-      fromResults: [{ data: { id: "new-id" }, error: null }],
+      fromResults: [
+        { data: null, error: null }, // entitlement lookup: no row -> free/unlimited
+        { data: { id: "new-id" }, error: null }, // insert
+      ],
     });
     const { saveQrCode } = await loadActions(client);
 
     await saveQrCode({ ...VALID_INPUT, mode: "dynamic" });
 
-    const insertedChain = client.from.mock.results[0].value;
+    const insertedChain = client.from.mock.results[1].value;
     const insertCall = insertedChain.insert.mock.calls[0][0];
     expect(typeof insertCall.slug).toBe("string");
     expect(insertCall.slug.length).toBeGreaterThan(0);
@@ -118,13 +121,16 @@ describe("saveQrCode", () => {
   it("stores the built payload as destination_url for a dynamic QR", async () => {
     const client = mockSupabase({
       user: mockUser,
-      fromResults: [{ data: { id: "new-id" }, error: null }],
+      fromResults: [
+        { data: null, error: null }, // entitlement lookup
+        { data: { id: "new-id" }, error: null }, // insert
+      ],
     });
     const { saveQrCode } = await loadActions(client);
 
     await saveQrCode({ ...VALID_INPUT, mode: "dynamic" });
 
-    const insertCall = client.from.mock.results[0].value.insert.mock.calls[0][0];
+    const insertCall = client.from.mock.results[1].value.insert.mock.calls[0][0];
     expect(insertCall.destination_url).toBe("https://example.com");
   });
 
@@ -139,6 +145,63 @@ describe("saveQrCode", () => {
 
     const insertCall = client.from.mock.results[0].value.insert.mock.calls[0][0];
     expect(insertCall.destination_url).toBeNull();
+  });
+
+  it("skips the dynamic-QR count query entirely for an unlimited entitlement", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        { data: null, error: null }, // entitlement lookup: unlimited
+        { data: { id: "new-id" }, error: null }, // insert
+      ],
+    });
+    const { saveQrCode } = await loadActions(client);
+
+    const result = await saveQrCode({ ...VALID_INPUT, mode: "dynamic" });
+
+    expect(result.data).toEqual({ id: "new-id" });
+    // Exactly 2 .from() calls: entitlement lookup + insert — no count query.
+    expect(client.from).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects creating a dynamic QR when the account is exactly at its finite limit", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        {
+          data: { plan: "pro", is_lifetime: false, expires_at: null, dynamic_qr_limit: 3 },
+          error: null,
+        }, // entitlement lookup
+        { data: null, error: null, count: 3 }, // current dynamic QR count
+      ],
+    });
+    const { saveQrCode } = await loadActions(client);
+
+    const result = await saveQrCode({ ...VALID_INPUT, mode: "dynamic" });
+
+    expect(result.error).toMatch(/limit of 3/i);
+    expect(result.data).toBeUndefined();
+    // Never reaches the insert — only the entitlement + count lookups ran.
+    expect(client.from).toHaveBeenCalledTimes(2);
+  });
+
+  it("allows creating a dynamic QR when under a finite limit", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        {
+          data: { plan: "pro", is_lifetime: false, expires_at: null, dynamic_qr_limit: 3 },
+          error: null,
+        }, // entitlement lookup
+        { data: null, error: null, count: 2 }, // current dynamic QR count
+        { data: { id: "new-id" }, error: null }, // insert
+      ],
+    });
+    const { saveQrCode } = await loadActions(client);
+
+    const result = await saveQrCode({ ...VALID_INPUT, mode: "dynamic" });
+
+    expect(result.data).toEqual({ id: "new-id" });
   });
 });
 
@@ -175,7 +238,7 @@ describe("updateQrCode", () => {
     const client = mockSupabase({
       user: mockUser,
       fromResults: [
-        { data: { slug: "existing1" }, error: null }, // existence check
+        { data: { slug: "existing1", mode: "dynamic" }, error: null }, // existence check — already dynamic
         { data: { id: "qr-1" }, error: null }, // the update itself
       ],
     });
@@ -190,6 +253,44 @@ describe("updateQrCode", () => {
     const updateCall = client.from.mock.results[1].value.update.mock.calls[0][0];
     expect(updateCall.destination_url).toBe("https://changed.example.com");
     expect(updateCall.slug).toBe("existing1");
+  });
+
+  it("checks the dynamic-QR allowance only when a static QR is converted to dynamic", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        { data: { slug: null, mode: "static" }, error: null }, // existence check — was static
+        {
+          data: { plan: "pro", is_lifetime: false, expires_at: null, dynamic_qr_limit: 1 },
+          error: null,
+        }, // entitlement lookup
+        { data: null, error: null, count: 1 }, // already at the limit
+      ],
+    });
+    const { updateQrCode } = await loadActions(client);
+
+    const result = await updateQrCode("qr-1", { ...VALID_INPUT, mode: "dynamic" });
+
+    expect(result.error).toMatch(/limit of 1/i);
+    // Never reaches the update — existence check + entitlement + count only.
+    expect(client.from).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not re-check the allowance when an already-dynamic QR is merely edited", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        { data: { slug: "existing1", mode: "dynamic" }, error: null }, // existence check
+        { data: { id: "qr-1" }, error: null }, // the update itself
+      ],
+    });
+    const { updateQrCode } = await loadActions(client);
+
+    const result = await updateQrCode("qr-1", { ...VALID_INPUT, mode: "dynamic" });
+
+    expect(result.data).toEqual({ id: "qr-1" });
+    // Only the existence check + update — no entitlement lookup at all.
+    expect(client.from).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -254,6 +355,7 @@ describe("duplicateQrCode", () => {
           },
           error: null,
         },
+        { data: null, error: null }, // entitlement lookup: unlimited
         { data: { id: "copy-id" }, error: null },
       ],
     });
@@ -261,10 +363,40 @@ describe("duplicateQrCode", () => {
 
     await duplicateQrCode("source-id");
 
-    const insertCall = client.from.mock.results[1].value.insert.mock.calls[0][0];
+    const insertCall = client.from.mock.results[2].value.insert.mock.calls[0][0];
     expect(insertCall.destination_url).toBe("https://example.com");
     expect(typeof insertCall.slug).toBe("string");
     expect(insertCall.slug.length).toBeGreaterThan(0);
+  });
+
+  it("rejects duplicating a dynamic QR when the account is at its finite limit", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        {
+          data: {
+            name: "Original",
+            mode: "dynamic",
+            qr_type: "url",
+            payload_data: { url: "https://example.com" },
+            design_config: DEFAULT_DESIGN_CONFIG,
+            destination_url: "https://example.com",
+          },
+          error: null,
+        },
+        {
+          data: { plan: "pro", is_lifetime: false, expires_at: null, dynamic_qr_limit: 2 },
+          error: null,
+        },
+        { data: null, error: null, count: 2 },
+      ],
+    });
+    const { duplicateQrCode } = await loadActions(client);
+
+    const result = await duplicateQrCode("source-id");
+
+    expect(result.error).toMatch(/limit of 2/i);
+    expect(result.data).toBeUndefined();
   });
 });
 

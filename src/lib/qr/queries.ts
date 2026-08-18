@@ -58,6 +58,24 @@ const SCAN_EVENTS_WINDOW_DAYS = 30;
  * joins through `qr_codes.user_id`) — no explicit filter needed here, same
  * convention as `listQrCodes`/`getQrCodeById` above.
  */
+/**
+ * Dynamic QRs that are active *or* paused count against a finite plan
+ * limit (`src/lib/account/entitlements.ts`); archived ones don't —
+ * archiving is already the documented, non-destructive way to free up
+ * room (Module 3.5), so it does double duty here rather than needing a
+ * second "this doesn't count" mechanism.
+ */
+export async function countDynamicQrCodes(): Promise<number> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("qr_codes")
+    .select("id", { count: "exact", head: true })
+    .eq("mode", "dynamic")
+    .neq("status", "archived");
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function listScanEvents(qrCodeId: string): Promise<QrScanEvent[]> {
   const supabase = await createClient();
   const since = new Date(Date.now() - SCAN_EVENTS_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();

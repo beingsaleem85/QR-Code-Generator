@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { AUTH_REQUIRED, type ActionResult, type SaveQrCodeInput } from "@/lib/qr/action-types";
 import { buildQrPayload } from "@/lib/qr/render";
 import { generateRandomSlug } from "@/lib/qr/slug";
+import { getEntitlementForUser, resolveDynamicQrAllowance } from "@/lib/account/entitlements";
+import { countDynamicQrCodes } from "@/lib/qr/queries";
 import type { QRCodeStatus } from "@/types/qr-record";
 
 function revalidateQrPaths(id?: string) {
@@ -49,6 +51,30 @@ function resolveDestinationUrl(input: SaveQrCodeInput, payload: string): string 
   return input.mode === "dynamic" ? payload : null;
 }
 
+/**
+ * Server-side gate for creating (or converting to) a dynamic QR — the
+ * client never decides this. Skips the count query entirely for an
+ * unlimited entitlement (the common case today, since no plan currently
+ * has a finite `dynamic_qr_limit` configured) rather than counting rows
+ * that will never matter to the decision.
+ */
+async function checkDynamicQrAllowance(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<{ error?: string }> {
+  const entitlement = await getEntitlementForUser(supabase, userId);
+  if (entitlement.dynamicQrLimit === null) return {};
+
+  const count = await countDynamicQrCodes();
+  const allowance = resolveDynamicQrAllowance(entitlement, count);
+  if (!allowance.allowed) {
+    return {
+      error: `You've reached your plan's limit of ${allowance.limit} dynamic QR codes. Archive or delete one to create another, or upgrade your plan.`,
+    };
+  }
+  return {};
+}
+
 export async function saveQrCode(input: SaveQrCodeInput): Promise<ActionResult<{ id: string }>> {
   const validated = validateSaveInput(input);
   if ("error" in validated) return { error: validated.error };
@@ -56,6 +82,11 @@ export async function saveQrCode(input: SaveQrCodeInput): Promise<ActionResult<{
   const supabase = await createClient();
   const user = await requireUser(supabase);
   if (!user) return { error: AUTH_REQUIRED };
+
+  if (input.mode === "dynamic") {
+    const allowance = await checkDynamicQrAllowance(supabase, user.id);
+    if (allowance.error) return { error: allowance.error };
+  }
 
   const destinationUrl = resolveDestinationUrl(input, validated.payload);
 
@@ -100,11 +131,20 @@ export async function updateQrCode(
 
   const { data: existing } = await supabase
     .from("qr_codes")
-    .select("slug")
+    .select("slug, mode")
     .eq("id", id)
     .maybeSingle();
   if (!existing) {
     return { error: "Couldn't find that QR code — it may have been deleted." };
+  }
+
+  // Only check the allowance when this edit is what actually turns the QR
+  // dynamic — an already-dynamic QR being edited isn't consuming a new
+  // slot, and blocking edits to it just because the account happens to be
+  // at its limit would be a hostile, pointless restriction.
+  if (input.mode === "dynamic" && existing.mode !== "dynamic") {
+    const allowance = await checkDynamicQrAllowance(supabase, user.id);
+    if (allowance.error) return { error: allowance.error };
   }
 
   const destinationUrl = resolveDestinationUrl(input, validated.payload);
@@ -157,6 +197,13 @@ export async function duplicateQrCode(id: string): Promise<ActionResult<{ id: st
 
   if (fetchError || !source) {
     return { error: "Couldn't find that QR code to duplicate." };
+  }
+
+  // Duplicating a dynamic QR creates a brand-new dynamic row — consumes a
+  // slot exactly like saveQrCode does.
+  if (source.mode === "dynamic") {
+    const allowance = await checkDynamicQrAllowance(supabase, user.id);
+    if (allowance.error) return { error: allowance.error };
   }
 
   let lastError: string | null = null;

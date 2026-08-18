@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DESIGN_CONFIG } from "@/types/qr-design";
 
-function createChain(result: { data?: unknown; error?: unknown }) {
+function createChain(result: { data?: unknown; error?: unknown; count?: number }) {
   const chain: Record<string, unknown> = {
     select: vi.fn(() => chain),
     eq: vi.fn(() => chain),
@@ -153,5 +153,31 @@ describe("listScanEvents", () => {
     const { listScanEvents } = await loadQueries(chain);
 
     await expect(listScanEvents("qr-1")).rejects.toThrow("connection failed");
+  });
+});
+
+describe("countDynamicQrCodes", () => {
+  it("returns the count from the database", async () => {
+    const chain = createChain({ data: null, error: null, count: 4 });
+    const { countDynamicQrCodes } = await loadQueries(chain);
+
+    expect(await countDynamicQrCodes()).toBe(4);
+  });
+
+  it("filters to dynamic mode, excluding archived", async () => {
+    const chain = createChain({ data: null, error: null, count: 0 });
+    const { countDynamicQrCodes } = await loadQueries(chain);
+
+    await countDynamicQrCodes();
+
+    expect(chain.eq).toHaveBeenCalledWith("mode", "dynamic");
+    expect(chain.neq).toHaveBeenCalledWith("status", "archived");
+  });
+
+  it("throws on a real database error", async () => {
+    const chain = createChain({ data: null, error: { message: "connection failed" } });
+    const { countDynamicQrCodes } = await loadQueries(chain);
+
+    await expect(countDynamicQrCodes()).rejects.toThrow("connection failed");
   });
 });

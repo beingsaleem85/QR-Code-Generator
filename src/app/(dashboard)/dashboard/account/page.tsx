@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { getMyEntitlement, planLabel } from "@/lib/account/entitlements";
 import { MOCK_PROFILE } from "@/lib/account/mock-data";
+import { countDynamicQrCodes } from "@/lib/qr/queries";
 
 export default async function AccountPage() {
   // Real end-to-end (unlike the rest of this page, still MOCK_PROFILE-driven
@@ -12,6 +13,7 @@ export default async function AccountPage() {
   // security-relevant fact, not display data, so it always reflects the
   // actually-signed-in user's real entitlement.
   const entitlement = await getMyEntitlement();
+  const dynamicQrCount = await countDynamicQrCodes();
 
   return (
     <div className="flex flex-col gap-6">
@@ -51,6 +53,14 @@ export default async function AccountPage() {
               Renews {new Date(entitlement.expiresAt).toLocaleDateString()}
             </p>
           ) : null}
+          <div className="flex items-center justify-between border-t border-border pt-3">
+            <p className="text-xs text-muted-foreground">Dynamic QR codes</p>
+            <p className="text-xs font-medium text-foreground">
+              {entitlement.dynamicQrLimit === null
+                ? "Unlimited"
+                : `${dynamicQrCount} / ${entitlement.dynamicQrLimit}`}
+            </p>
+          </div>
         </Card>
 
         <Card className="flex flex-col gap-3 p-5">

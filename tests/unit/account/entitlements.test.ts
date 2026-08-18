@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { planLabel, type Entitlement } from "@/lib/account/entitlements";
+import { planLabel, resolveDynamicQrAllowance, type Entitlement } from "@/lib/account/entitlements";
 
 function createChain(result: { data?: unknown; error?: unknown }) {
   const chain: Record<string, unknown> = {
@@ -32,11 +32,18 @@ async function loadEntitlements(options: {
   return import("@/lib/account/entitlements");
 }
 
+const FREE: Entitlement = {
+  plan: "free",
+  isLifetime: false,
+  expiresAt: null,
+  dynamicQrLimit: null,
+};
+
 describe("getMyEntitlement", () => {
   it("returns free for an unauthenticated caller without touching the database", async () => {
     const { getMyEntitlement } = await loadEntitlements({ user: null });
 
-    expect(await getMyEntitlement()).toEqual({ plan: "free", isLifetime: false, expiresAt: null });
+    expect(await getMyEntitlement()).toEqual(FREE);
   });
 
   it("returns free when the user has no entitlement row", async () => {
@@ -45,19 +52,36 @@ describe("getMyEntitlement", () => {
       chainResult: { data: null, error: null },
     });
 
-    expect(await getMyEntitlement()).toEqual({ plan: "free", isLifetime: false, expiresAt: null });
+    expect(await getMyEntitlement()).toEqual(FREE);
   });
 
-  it("maps a real pro/lifetime row", async () => {
+  it("maps a real pro/lifetime/unlimited row", async () => {
     const { getMyEntitlement } = await loadEntitlements({
       user: { id: "user-1" },
       chainResult: {
-        data: { plan: "pro", is_lifetime: true, expires_at: null },
+        data: { plan: "pro", is_lifetime: true, expires_at: null, dynamic_qr_limit: null },
         error: null,
       },
     });
 
-    expect(await getMyEntitlement()).toEqual({ plan: "pro", isLifetime: true, expiresAt: null });
+    expect(await getMyEntitlement()).toEqual({
+      plan: "pro",
+      isLifetime: true,
+      expiresAt: null,
+      dynamicQrLimit: null,
+    });
+  });
+
+  it("maps a real row with a finite dynamic QR limit", async () => {
+    const { getMyEntitlement } = await loadEntitlements({
+      user: { id: "user-1" },
+      chainResult: {
+        data: { plan: "pro", is_lifetime: false, expires_at: null, dynamic_qr_limit: 100 },
+        error: null,
+      },
+    });
+
+    expect((await getMyEntitlement()).dynamicQrLimit).toBe(100);
   });
 
   it("returns free (not an error) when the query itself errors", async () => {
@@ -66,14 +90,13 @@ describe("getMyEntitlement", () => {
       chainResult: { data: null, error: { message: "connection failed" } },
     });
 
-    expect(await getMyEntitlement()).toEqual({ plan: "free", isLifetime: false, expiresAt: null });
+    expect(await getMyEntitlement()).toEqual(FREE);
   });
 });
 
 describe("planLabel", () => {
   it("labels a free plan", () => {
-    const entitlement: Entitlement = { plan: "free", isLifetime: false, expiresAt: null };
-    expect(planLabel(entitlement)).toBe("Free");
+    expect(planLabel(FREE)).toBe("Free");
   });
 
   it("labels a non-lifetime pro plan", () => {
@@ -81,12 +104,41 @@ describe("planLabel", () => {
       plan: "pro",
       isLifetime: false,
       expiresAt: "2027-01-01T00:00:00.000Z",
+      dynamicQrLimit: 100,
     };
     expect(planLabel(entitlement)).toBe("Pro");
   });
 
   it("labels a lifetime pro plan distinctly", () => {
-    const entitlement: Entitlement = { plan: "pro", isLifetime: true, expiresAt: null };
+    const entitlement: Entitlement = {
+      plan: "pro",
+      isLifetime: true,
+      expiresAt: null,
+      dynamicQrLimit: null,
+    };
     expect(planLabel(entitlement)).toBe("Lifetime Pro");
+  });
+});
+
+describe("resolveDynamicQrAllowance", () => {
+  it("allows creation when under a finite limit", () => {
+    const entitlement: Entitlement = { ...FREE, plan: "pro", dynamicQrLimit: 3 };
+    expect(resolveDynamicQrAllowance(entitlement, 2)).toEqual({ allowed: true, limit: 3 });
+  });
+
+  it("rejects creation when exactly at a finite limit", () => {
+    const entitlement: Entitlement = { ...FREE, plan: "pro", dynamicQrLimit: 3 };
+    expect(resolveDynamicQrAllowance(entitlement, 3)).toEqual({ allowed: false, limit: 3 });
+  });
+
+  it("rejects creation when already over a finite limit", () => {
+    const entitlement: Entitlement = { ...FREE, plan: "pro", dynamicQrLimit: 3 };
+    expect(resolveDynamicQrAllowance(entitlement, 5)).toEqual({ allowed: false, limit: 3 });
+  });
+
+  it("always allows creation for an unlimited entitlement, regardless of current count", () => {
+    const unlimited: Entitlement = { ...FREE, plan: "pro", isLifetime: true, dynamicQrLimit: null };
+    expect(resolveDynamicQrAllowance(unlimited, 0)).toEqual({ allowed: true, limit: null });
+    expect(resolveDynamicQrAllowance(unlimited, 1000)).toEqual({ allowed: true, limit: null });
   });
 });
