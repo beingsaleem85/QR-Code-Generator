@@ -1,13 +1,28 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FilesView } from "@/components/files/FilesView";
 import type { QrAsset } from "@/types/asset";
 import type { QRCodeSummary } from "@/types/qr-record";
 
+const refreshMock = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: refreshMock }),
+}));
+
+const deleteQrAssetMock = vi.fn();
+vi.mock("@/lib/files/actions", () => ({
+  deleteQrAsset: (...args: unknown[]) => deleteQrAssetMock(...args),
+}));
+
 afterEach(() => cleanup());
+
+beforeEach(() => {
+  refreshMock.mockReset();
+  deleteQrAssetMock.mockReset();
+});
 
 const QR_CODES: QRCodeSummary[] = [
   {
@@ -54,7 +69,8 @@ describe("FilesView", () => {
     expect(screen.getAllByText("Unlinked").length).toBeGreaterThan(0);
   });
 
-  it("shows the empty state once every asset has been deleted", async () => {
+  it("deletes for real and shows the empty state once every asset is gone", async () => {
+    deleteQrAssetMock.mockResolvedValue({ data: { id: "a1" } });
     const user = userEvent.setup();
     render(<FilesView initialAssets={[ASSETS[0]]} qrCodes={QR_CODES} />);
 
@@ -63,7 +79,24 @@ describe("FilesView", () => {
     const dialog = screen.getAllByRole("dialog", { name: "Confirm delete menu-v3.pdf" })[0];
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
 
-    expect(screen.getByText("No files yet")).toBeInTheDocument();
+    expect(deleteQrAssetMock).toHaveBeenCalledWith("a1");
+    expect(await screen.findByText("No files yet")).toBeInTheDocument();
+    expect(refreshMock).toHaveBeenCalled();
+  });
+
+  it("shows an error and keeps the asset when delete fails", async () => {
+    deleteQrAssetMock.mockResolvedValue({ error: "Couldn't delete that file — please try again." });
+    const user = userEvent.setup();
+    render(<FilesView initialAssets={[ASSETS[0]]} qrCodes={QR_CODES} />);
+
+    await user.click(screen.getAllByRole("button", { name: "Delete menu-v3.pdf" })[0]);
+    const dialog = screen.getAllByRole("dialog", { name: "Confirm delete menu-v3.pdf" })[0];
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    expect(
+      await screen.findByText("Couldn't delete that file — please try again."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No files yet")).not.toBeInTheDocument();
   });
 
   it("cancelling the confirmation dialog keeps the asset in the list", async () => {
@@ -76,5 +109,6 @@ describe("FilesView", () => {
 
     expect(screen.queryByText("No files yet")).not.toBeInTheDocument();
     expect(screen.getAllByText("menu-v3.pdf").length).toBeGreaterThan(0);
+    expect(deleteQrAssetMock).not.toHaveBeenCalled();
   });
 });

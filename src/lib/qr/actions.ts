@@ -7,6 +7,8 @@ import { buildQrPayload } from "@/lib/qr/render";
 import { generateRandomSlug } from "@/lib/qr/slug";
 import { getEntitlementForUser, resolveDynamicQrAllowance } from "@/lib/account/entitlements";
 import { countDynamicQrCodes } from "@/lib/qr/queries";
+import { getQrTypeDefinition } from "@/lib/qr/registry";
+import { syncQrAssets } from "@/lib/qr/asset-sync";
 import type { QRCodeStatus } from "@/types/qr-record";
 
 function revalidateQrPaths(id?: string) {
@@ -41,14 +43,17 @@ function validateSaveInput(input: SaveQrCodeInput): { payload: string } | { erro
  * payload so the redirect route (a hot, latency-sensitive path) can resolve
  * it with a single flat column read — no registry/payload-builder logic
  * available there at all, since it runs through a SECURITY DEFINER SQL
- * function, not app code. Only ever non-null for dynamic types whose
- * payload already *is* a destination (currently `url`, `whatsapp` — the
- * only dynamic types with a real content form); types that need a hosted
- * landing page instead (`needsLandingPage: true`) don't have one yet, so
- * `buildQrPayload` already returns `null` for them and this stays null too.
+ * function, not app code. Only ever non-null for dynamic types that
+ * actually redirect (`needsLandingPage: false` — `url`, `whatsapp`).
+ * Landing-page types (pdf, image gallery, audio, video) encode `/p/[slug]`
+ * instead (`resolveEncodedPayload`, `src/lib/qr/render.ts`) and have no
+ * single "destination" to denormalize — their built payload is never a
+ * real URL to begin with (see each payload builder's own doc comment), so
+ * this stays `null` for them regardless of mode.
  */
 function resolveDestinationUrl(input: SaveQrCodeInput, payload: string): string | null {
-  return input.mode === "dynamic" ? payload : null;
+  if (input.mode !== "dynamic") return null;
+  return getQrTypeDefinition(input.qrType).needsLandingPage ? null : payload;
 }
 
 /**
@@ -109,6 +114,9 @@ export async function saveQrCode(input: SaveQrCodeInput): Promise<ActionResult<{
       .single();
 
     if (!error) {
+      if (getQrTypeDefinition(input.qrType).needsStorage) {
+        await syncQrAssets(supabase, user.id, data.id, input.qrType, input.content);
+      }
       revalidateQrPaths(data.id);
       return { data: { id: data.id } };
     }
@@ -169,6 +177,9 @@ export async function updateQrCode(
       .single();
 
     if (!error) {
+      if (getQrTypeDefinition(input.qrType).needsStorage) {
+        await syncQrAssets(supabase, user.id, id, input.qrType, input.content);
+      }
       revalidateQrPaths(id);
       return { data: { id: data.id } };
     }
@@ -265,6 +276,17 @@ export async function deleteQrCode(id: string): Promise<ActionResult<{ id: strin
   const user = await requireUser(supabase);
   if (!user) return { error: AUTH_REQUIRED };
 
+  // qr_assets.qr_code_id is ON DELETE SET NULL (Module 1.4), not CASCADE —
+  // deliberately, so an asset can outlive its QR if ever needed — but a
+  // plain delete would otherwise leave the underlying Storage files
+  // orphaned forever with nothing in the UI ever pointing at them again.
+  // Fetched before the delete since qr_code_id becomes unqueryable-by-id
+  // (set to null) the moment the parent row is gone.
+  const { data: orphanedAssets } = await supabase
+    .from("qr_assets")
+    .select("id, bucket, path")
+    .eq("qr_code_id", id);
+
   const { error, count } = await supabase.from("qr_codes").delete({ count: "exact" }).eq("id", id);
 
   if (error) {
@@ -272,6 +294,20 @@ export async function deleteQrCode(id: string): Promise<ActionResult<{ id: strin
   }
   if (!count) {
     return { error: "That QR code no longer exists, or you don't have access to it." };
+  }
+
+  for (const asset of (orphanedAssets as { id: string; bucket: string; path: string }[] | null) ??
+    []) {
+    await supabase.storage.from(asset.bucket).remove([asset.path]);
+  }
+  if (orphanedAssets && orphanedAssets.length > 0) {
+    await supabase
+      .from("qr_assets")
+      .delete()
+      .in(
+        "id",
+        (orphanedAssets as { id: string }[]).map((asset) => asset.id),
+      );
   }
 
   revalidateQrPaths(id);

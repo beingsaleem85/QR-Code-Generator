@@ -19,6 +19,10 @@ describe("buildQrPayload", () => {
   });
 
   it("returns null for a type with no payload builder yet", () => {
+    expect(buildQrPayload("images", {})).toBeNull();
+  });
+
+  it("returns null for pdf content before a file has actually been uploaded", () => {
     expect(buildQrPayload("pdf", {})).toBeNull();
   });
 
@@ -47,6 +51,15 @@ describe("resolveEncodedPayload", () => {
   it("returns null for a dynamic QR with no slug yet (not saved once)", () => {
     expect(resolveEncodedPayload("dynamic", "url", { url: "example.com" }, null)).toBeNull();
     expect(resolveEncodedPayload("dynamic", "url", { url: "example.com" })).toBeNull();
+  });
+
+  it("encodes /p/[slug] instead of /r/[slug] for a needsLandingPage type (pdf)", () => {
+    const payload = resolveEncodedPayload("dynamic", "pdf", {}, "abc12345");
+    expect(payload).toMatch(/\/p\/abc12345$/);
+  });
+
+  it("returns null for a landing-page type with no slug yet", () => {
+    expect(resolveEncodedPayload("dynamic", "pdf", {}, null)).toBeNull();
   });
 
   it("ignores content entirely once a dynamic QR has a slug", () => {

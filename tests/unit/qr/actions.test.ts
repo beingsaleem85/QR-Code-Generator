@@ -20,6 +20,7 @@ function createChain(result: { data?: unknown; error?: unknown; count?: number }
     delete: vi.fn(() => chain),
     eq: vi.fn(() => chain),
     neq: vi.fn(() => chain),
+    in: vi.fn(() => chain),
     order: vi.fn(() => chain),
     single: vi.fn(() => Promise.resolve(result)),
     maybeSingle: vi.fn(() => Promise.resolve(result)),
@@ -31,6 +32,7 @@ function createChain(result: { data?: unknown; error?: unknown; count?: number }
 function mockSupabase(options: {
   user?: typeof mockUser | null;
   fromResults: unknown[]; // one chain's result per sequential .from() call
+  storage?: { from: ReturnType<typeof vi.fn> };
 }) {
   const chains = options.fromResults.map((result) => createChain(result as never));
   const from = vi.fn();
@@ -39,6 +41,7 @@ function mockSupabase(options: {
   return {
     auth: { getUser: vi.fn(() => Promise.resolve({ data: { user: options.user ?? null } })) },
     from,
+    storage: options.storage ?? { from: vi.fn() },
   };
 }
 
@@ -430,7 +433,10 @@ describe("deleteQrCode", () => {
   it("deletes successfully when a row was actually affected", async () => {
     const client = mockSupabase({
       user: mockUser,
-      fromResults: [{ error: null, count: 1 }],
+      fromResults: [
+        { data: [], error: null }, // no associated qr_assets to clean up
+        { error: null, count: 1 },
+      ],
     });
     const { deleteQrCode } = await loadActions(client);
 
@@ -442,7 +448,10 @@ describe("deleteQrCode", () => {
   it("reports an error (not a silent success) when RLS blocks the delete — 0 rows affected", async () => {
     const client = mockSupabase({
       user: mockUser,
-      fromResults: [{ error: null, count: 0 }],
+      fromResults: [
+        { data: [], error: null },
+        { error: null, count: 0 },
+      ],
     });
     const { deleteQrCode } = await loadActions(client);
 
@@ -456,5 +465,27 @@ describe("deleteQrCode", () => {
     const { deleteQrCode } = await loadActions(mockSupabase({ user: null, fromResults: [] }));
     const result = await deleteQrCode("qr-1");
     expect(result.error).toBe(AUTH_REQUIRED);
+  });
+
+  it("removes associated Storage objects and qr_assets rows for a file-based QR", async () => {
+    const removeMock = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        {
+          data: [{ id: "asset-1", bucket: "qr-documents", path: "user-1/asset-1/menu.pdf" }],
+          error: null,
+        },
+        { error: null, count: 1 }, // the qr_codes delete
+        { error: null }, // the qr_assets delete
+      ],
+      storage: { from: vi.fn(() => ({ remove: removeMock })) },
+    });
+    const { deleteQrCode } = await loadActions(client);
+
+    await deleteQrCode("qr-1");
+
+    expect(client.storage.from).toHaveBeenCalledWith("qr-documents");
+    expect(removeMock).toHaveBeenCalledWith(["user-1/asset-1/menu.pdf"]);
   });
 });

@@ -9,6 +9,10 @@ import { WhatsAppForm } from "@/components/qr/content-forms/WhatsAppForm";
 import { WifiForm } from "@/components/qr/content-forms/WifiForm";
 import { VCardForm } from "@/components/qr/content-forms/VCardForm";
 import { EventForm } from "@/components/qr/content-forms/EventForm";
+import { PdfForm } from "@/components/qr/content-forms/PdfForm";
+import { ImagesForm } from "@/components/qr/content-forms/ImagesForm";
+import { AudioForm } from "@/components/qr/content-forms/AudioForm";
+import { VideoForm } from "@/components/qr/content-forms/VideoForm";
 
 export interface ContentFormProps {
   value: Record<string, unknown>;
@@ -30,4 +34,8 @@ export const CONTENT_FORMS: Partial<Record<QRType, ComponentType<ContentFormProp
   wifi: WifiForm,
   vcard: VCardForm,
   event: EventForm,
+  pdf: PdfForm,
+  images: ImagesForm,
+  audio: AudioForm,
+  video: VideoForm,
 };

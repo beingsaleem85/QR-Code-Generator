@@ -7,4 +7,8 @@ export * from "./whatsapp";
 export * from "./wifi";
 export * from "./vcard";
 export * from "./event";
+export * from "./pdf";
+export * from "./images";
+export * from "./audio";
+export * from "./video";
 export * from "./not-yet-implemented";

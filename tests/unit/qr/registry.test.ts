@@ -11,6 +11,10 @@ const IMPLEMENTED_TYPES = [
   "whatsapp",
   "wifi",
   "event",
+  "pdf",
+  "images",
+  "audio",
+  "video",
 ] as const;
 
 describe("QR type registry", () => {
@@ -31,7 +35,7 @@ describe("QR type registry", () => {
     }
   });
 
-  it("defines a payloadBuilder only for the Module 1.3 implemented types", () => {
+  it("defines a payloadBuilder only for types with a real content form", () => {
     for (const definition of listQrTypeDefinitions()) {
       const hasBuilder = typeof definition.payloadBuilder === "function";
       expect(hasBuilder).toBe(

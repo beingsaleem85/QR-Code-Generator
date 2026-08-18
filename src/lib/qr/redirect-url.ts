@@ -10,6 +10,18 @@ export function buildRedirectUrl(slug: string): string {
 }
 
 /**
+ * The landing-page counterpart to `buildRedirectUrl` (Module 3.8) — used
+ * instead of `/r/[slug]` for dynamic QR types that need a hosted
+ * experience rather than a plain redirect (`needsLandingPage: true` in the
+ * registry: pdf, image gallery, audio, video, and Module 3.9's social/
+ * multi-link/menu/feedback types).
+ */
+export function buildLandingPageUrl(slug: string): string {
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  return `${base}/p/${slug}`;
+}
+
+/**
  * Defense-in-depth against open-redirect abuse (Module 3.6 requirement):
  * only ever redirect to a well-formed http(s) URL. The `url` QR type's own
  * Zod schema already enforces this at input time, but the redirect route

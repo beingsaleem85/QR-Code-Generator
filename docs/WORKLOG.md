@@ -831,3 +831,32 @@ Verification:
 Known issues:
 
 - None. Full details, including the exact live-verification sequence, are in `docs/ARCHITECTURE.md`'s "Dynamic QR Quota" section.
+
+## Module 3.8 — File-Based QR Types and Supabase Storage
+
+Status: COMPLETE
+
+Completed:
+
+- **No service-role key needed, per the explicit instruction**: new migration `20260819180000_add_public_asset_read_policies.sql` adds a `SECURITY DEFINER` function, `qr_asset_is_publicly_readable(bucket, path)`, called from inside new `storage.objects` RLS policies on `qr-documents`/`qr-gallery`/`qr-media` (not `qr-logos` — those are only ever composited server-side) — grants `anon`/`authenticated` `select` only when the owning QR is `dynamic` and `active`. A plain subquery couldn't do this directly (it would run as the calling role and hit `qr_assets`/`qr_codes`'s own RLS), so a narrow privileged function does the join instead — same pattern as Module 3.6's `resolve_qr_redirect`, just used inside a Storage policy. `20260819180100_add_resolve_landing_page.sql` adds a second `SECURITY DEFINER` function, `resolve_landing_page(p_slug)`, mirroring `resolve_qr_redirect` for the new `/p/[slug]` page. Both validated live via direct RPC/`createSignedUrl` calls against a seeded row before any app code was written. `SUPABASE_SERVICE_ROLE_KEY` stays blank.
+- **Four real QR types**: `pdf`, `images`, `audio`, `video` move from `notYetImplementedQrSchema` to real Zod schemas (`src/lib/validation/qr/`) and payload builders (`src/lib/qr/payload-builders/`). `pdf`/`images`/`audio` are dynamic-only, Storage-backed, and store their asset path(s) in `payload_data`. `video` is `staticSupport: true`/`needsStorage: false` — static encodes the raw external URL directly, dynamic wraps it in a hosted landing page; no self-hosted video storage, per the master prompt.
+- `src/lib/qr/asset-upload.ts` uploads directly from the browser to Storage via the visitor's own authenticated session (no server round-trip). `src/lib/qr/asset-sync.ts`'s `syncQrAssets()` reconciles `qr_assets` rows (and the real Storage objects) against a QR's current content after every save/update; `deleteQrCode` (`src/lib/qr/actions.ts`) extended to remove the real Storage objects before the `qr_assets` rows are unreachable via `ON DELETE SET NULL`.
+- **`/p/[slug]` built for real now** (Module 1.2 stub previously deferred to "Module 3.9" — corrected, since 3.8's own file types require it; 3.9 will extend the same mechanism, not build a second one): resolves via `resolve_landing_page`, renders `not_found`/`inactive`/a real type-switched landing component (`src/components/landing/{Pdf,Gallery,Audio,Video}LandingPage.tsx`). The three Storage-backed ones are async Server Components generating signed URLs server-side via `src/lib/qr/signed-asset-url.ts` (never throws, `null` on any failure → a graceful "not available" fallback).
+- `resolveEncodedPayload` (Module 3.6) now branches dynamic-mode encoding on `needsLandingPage`: `/p/[slug]` for the four new types, `/r/[slug]` for everything else.
+- Files page (`/dashboard/files`) wired to real data: `src/lib/files/{queries,actions}.ts` (`listQrAssets`/`deleteQrAsset`) replace the Module 2.9 mock; `deleteQrAsset` mirrors `deleteQrCode`'s Storage-then-row deletion order. `src/lib/qr/mock-data.ts` and `src/lib/files/mock-data.ts` deleted (confirmed zero remaining consumers first).
+
+Verification:
+
+- New tests (54): `pdf.test.ts`/`images.test.ts`/`audio.test.ts`/`video.test.ts`, `asset-upload.test.ts`, `asset-sync.test.ts`, `landing-page-resolution.test.ts`, `signed-asset-url.test.ts`, `render.test.ts` (+2), `registry.test.ts` (updated), `actions.test.ts` (+`deleteQrCode` Storage cleanup), `files/queries.test.ts`, `files/actions.test.ts`, `FilesView.test.tsx` (rewritten).
+- `npm run typecheck` / `npx eslint .` (0 errors, same 9 pre-existing warnings) / `npx prettier --check .` — pass.
+- `npx vitest run` — **347/347 passing** across 55 files.
+- `rm -rf .next && npm run build` — pass, all routes build; `/dashboard/files` and `/p/[slug]` both dynamic (ƒ); no leftover `/api/test-only-*` routes.
+- **Live verification against the real Supabase project**: both migrations pushed; PDF (upload → save → signed-URL landing render → pause revokes access → replace cleans up the old file+row → cross-user isolation → delete cleans up file+row), Gallery (multi-image, multi-asset cleanup), Audio (title/description, real playback URL), and Video (both dynamic-with-landing-page and static-direct-encode) all driven through the real Server Actions end to end via the temp-route technique, then fully cleaned up. Full detail and one explicitly scoped gap (the Files page's own list/delete path wasn't separately browser-driven this pass — blocked on a missing `SUPABASE_ACCESS_TOKEN` for the `mailer_autoconfirm` toggle, covered instead by 8 passing unit tests over the identical read/delete logic) are in `docs/ARCHITECTURE.md`.
+
+Known issues:
+
+- None blocking. See `docs/ARCHITECTURE.md`'s "Known issues" under Module 3.8 for the three minor, deliberately-accepted items (no audio artwork, no Storage-object copy on duplicate, one unreachable orphaned test blob) and the Files-page verification gap.
+
+Next:
+
+- Module 3.9 — Hosted Landing Page QR Types
