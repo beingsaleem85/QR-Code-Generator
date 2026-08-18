@@ -2,12 +2,8 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import {
-  buildQrPayload,
-  renderQrPngDataUrl,
-  renderQrSvg,
-  slugifyForFilename,
-} from "@/lib/qr/render";
+import { buildQrPayload, slugifyForFilename } from "@/lib/qr/render";
+import { renderStyledQrPngDataUrl, renderStyledQrSvg } from "@/lib/qr/styled-svg";
 import type { DesignConfig } from "@/types/qr-design";
 import type { QRType } from "@/types/qr";
 
@@ -45,7 +41,7 @@ export function QRDownloadActions({ qrType, content, design, name }: QRDownloadA
     if (!payload) return;
     setDownloading("png");
     try {
-      const dataUrl = await renderQrPngDataUrl(payload, design);
+      const { dataUrl } = await renderStyledQrPngDataUrl(payload, design);
       triggerDownload(dataUrl, `${filename}-qr.png`);
     } finally {
       setDownloading(null);
@@ -56,7 +52,7 @@ export function QRDownloadActions({ qrType, content, design, name }: QRDownloadA
     if (!payload) return;
     setDownloading("svg");
     try {
-      const svg = await renderQrSvg(payload, design);
+      const { svg } = await renderStyledQrSvg(payload, design);
       const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
       triggerDownload(url, `${filename}-qr.svg`);
       URL.revokeObjectURL(url);

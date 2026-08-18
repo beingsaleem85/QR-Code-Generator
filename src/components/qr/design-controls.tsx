@@ -1,8 +1,11 @@
 "use client";
 
+import { useState, type ChangeEvent } from "react";
+import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { readLogoFile } from "@/lib/qr/logo";
 import type { DesignConfig } from "@/types/qr-design";
 
 interface DesignFrameControlsProps {
@@ -168,21 +171,57 @@ interface DesignLogoControlsProps {
 }
 
 export function DesignLogoControls({ value, onChange }: DesignLogoControlsProps) {
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // Reset the input so choosing the same file again still fires onChange.
+    event.target.value = "";
+    if (!file) return;
+
+    setError(null);
+    try {
+      const assetUrl = await readLogoFile(file);
+      onChange({ ...value, assetUrl });
+    } catch {
+      setError("Couldn't use that image — try a different file.");
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <FormField
         label="Logo"
         htmlFor="logo-upload"
-        helperText="Upload becomes available once file storage is connected (Module 3.8)."
+        helperText="Composited into the QR's preview and downloads. Only saved once you save this QR code."
+        error={error ?? undefined}
       >
         <input
           id="logo-upload"
           type="file"
           accept="image/*"
-          disabled
-          className="text-sm text-muted-foreground disabled:opacity-60"
+          onChange={handleFileChange}
+          className="text-sm text-muted-foreground"
         />
       </FormField>
+      {value.assetUrl ? (
+        <div className="flex items-center gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- a locally-generated data URL, not a remote/optimizable image; matches Avatar.tsx's established pattern for this kind of small user-supplied image preview. */}
+          <img
+            src={value.assetUrl}
+            alt="Logo preview"
+            className="h-10 w-10 rounded border border-border object-contain"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => onChange({ ...value, assetUrl: null })}
+          >
+            Remove logo
+          </Button>
+        </div>
+      ) : null}
       <FormField label="Logo size" htmlFor="logo-size">
         <input
           id="logo-size"

@@ -1,6 +1,7 @@
 "use client";
 
 import { AccordionItem } from "@/components/ui/AccordionItem";
+import { Button } from "@/components/ui/Button";
 import {
   DesignColorControls,
   DesignEyeControls,
@@ -8,6 +9,7 @@ import {
   DesignLogoControls,
   DesignPatternControls,
 } from "@/components/qr/design-controls";
+import { DEFAULT_DESIGN_CONFIG } from "@/types/qr-design";
 import type { DesignConfig } from "@/types/qr-design";
 
 interface QRDesignPanelProps {
@@ -18,6 +20,16 @@ interface QRDesignPanelProps {
 export function QRDesignPanel({ value, onChange }: QRDesignPanelProps) {
   return (
     <div className="flex flex-col gap-2">
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => onChange(DEFAULT_DESIGN_CONFIG)}
+        >
+          Reset design
+        </Button>
+      </div>
       <AccordionItem title="Frame">
         <DesignFrameControls
           value={value.frame}

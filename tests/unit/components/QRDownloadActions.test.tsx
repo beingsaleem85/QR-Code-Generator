@@ -8,11 +8,26 @@ import { DEFAULT_DESIGN_CONFIG } from "@/types/qr-design";
 
 afterEach(() => cleanup());
 
-// jsdom doesn't implement these — only needed so the SVG download path
-// (URL.createObjectURL/revokeObjectURL) doesn't throw during the test.
+// jsdom doesn't implement object URLs, real image loading, or a canvas 2D
+// context — the PNG path (Module 3.3) converts the styled SVG via
+// Image+canvas, so all three are mocked here.
 beforeEach(() => {
-  if (!URL.createObjectURL) URL.createObjectURL = vi.fn(() => "blob:mock");
-  if (!URL.revokeObjectURL) URL.revokeObjectURL = vi.fn();
+  URL.createObjectURL = vi.fn(() => "blob:mock");
+  URL.revokeObjectURL = vi.fn();
+
+  class MockImage {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    set src(_value: string) {
+      queueMicrotask(() => this.onload?.());
+    }
+  }
+  vi.stubGlobal("Image", MockImage);
+
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+    drawImage: vi.fn(),
+  } as unknown as CanvasRenderingContext2D);
+  vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,MOCK");
 });
 
 describe("QRDownloadActions", () => {

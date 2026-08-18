@@ -719,3 +719,61 @@ Added `qrcode` (npm) — the standard, actively-maintained package for QR image 
 
 - [x] All 9 static types: validate required fields (existing Module 1.3 schemas, re-used not re-implemented), build a correct encoded payload, generate a scannable QR, update preview, support download, preserve Unicode
 - [x] Every type has at least a valid case, invalid case, and Unicode/special-character case under automated test (payload-builder tests from Module 1.3, plus this module's rendering-level tests)
+
+## QR Styling and Live Preview Engine (Module 3.3)
+
+Makes every control in `QRDesignPanel` actually affect the rendered QR — Module 3.2 only wired solid foreground/background/transparent-background. This is a genuinely custom renderer, not more `qrcode`-library options: pattern/eye shapes, gradients, logo compositing, and frames all need per-module control the library's own `toString`/`toDataURL` don't expose.
+
+### Rendering pipeline: matrix → styled SVG → (optionally) PNG
+
+- `src/lib/qr/matrix.ts`'s `getQrMatrix()` calls `QRCode.create()` (the library's un-rendered form — a raw dark/light module bitmap) and wraps it with `isDark(row, col)` and `isFinderRegion(row, col)`. Finder-pattern (eye) positions are fixed by the QR spec for any symbol size (top-left, top-right, bottom-left, each 7×7), so this needed no data-driven detection — just the known geometry.
+- `src/lib/qr/styled-svg.ts`'s `renderStyledQrSvg()` builds the SVG by hand, module-by-module: data modules get their shape from `pattern.dotStyle` (square/dots/rounded); the 3 finder patterns are rendered as two-part shapes (a stroked outer ring sized to the real 7×7 finder geometry, styled/colored by `eyes.cornerSquareStyle`/`Color`, plus a solid inner 3×3, styled/colored by `eyes.cornerDotStyle`/`Color`) — deliberately independent of the data-module fill, so eye colors and data colors can differ (as the existing UI already implied by having separate controls). A gradient (`colors.gradient`), if set, replaces the solid foreground fill with a `<linearGradient>`/`<radialGradient>` reference.
+- `src/lib/qr/styled-svg.ts`'s `renderStyledQrPngDataUrl()` derives the PNG from that same SVG (via `Image` + `<canvas>`) instead of re-implementing every shape a second time in canvas draw calls — one rendering pipeline, not two. This intermediate blob URL is created and revoked (`URL.revokeObjectURL`) immediately after the image loads — see "Preview performance" below for why this is the one place an object URL was actually the right tool.
+
+### Reliability rules — implemented as real behavior, not just documented
+
+`src/lib/qr/reliability.ts` holds the rules called out explicitly in the master prompt:
+
+- **Contrast warning**: WCAG relative-luminance contrast ratio between foreground and (effective) background, flagged below `2.5:1` — deliberately lower than WCAG's own `4.5:1` text-legibility bar, since QR scanners tolerate far less contrast than human reading does; the threshold only fires for genuinely risky near-identical colors, not merely "not very pretty" combinations.
+- **Safe logo-size limits**: `clampLogoSizeRatio()` clamps to the same `[0.1, 0.3]` range the logo-size slider already used (Module 2.4) — one source of truth, so the UI control and the renderer can't drift apart. A clamp that actually changes the value surfaces as a user-facing warning, not a silent adjustment.
+- **Adequate quiet zone**: `MIN_QUIET_ZONE_MODULES = 4` (the QR spec's own recommendation) is applied unconditionally — there's no user control that can shrink it.
+- **Sensible error correction when a logo is enabled**: `getRecommendedErrorCorrectionLevel(hasLogo)` returns `"H"` (~30% recoverable) instead of the plain default `"M"` (~15%) whenever `logo.assetUrl` is set, computed automatically — not a user-facing toggle to forget.
+- **Fallback if a styling option is unsupported**: the entire custom SVG build runs inside a `try`; on any failure, `renderStyledQrSvg()` falls back to Module 3.2's plain solid-color renderer and returns a warning explaining a simplified version is shown. This is real, exercised behavior (a dedicated test forces the styled path to throw and asserts the fallback fires), not just a comment saying it should happen.
+- Per the master prompt's own explicit instruction, none of this guarantees scannability under every extreme combination (e.g. a huge logo _and_ a busy gradient _and_ poor contrast simultaneously) — the safeguards reduce risk, they don't eliminate it.
+
+### Preview performance
+
+- **Debounce**: `QRPreviewPanel` delays the (expensive, async) render by 200ms after the last content/design change via a `setTimeout` cleared on each new change — typing and slider-dragging stay responsive because the debounce only gates the render effect, never the input itself.
+- **No full-rerender loops**: the effect's dependency list is `design`'s individual slices (`colors`, `pattern`, `eyes`, `logo`, `frame`), not the whole `design` object, so it only re-fires when a slice that actually affects rendering changes.
+- **Object URL cleanup**: used in exactly one place — the SVG→PNG conversion's intermediate blob — and revoked in a `finally` immediately after the image loads (or the attempt fails), verified by a dedicated test. The logo asset itself deliberately does **not** use an object URL (see below), so there's no separate long-lived blob to track/leak.
+- **Memory**: `readLogoFile()` (`src/lib/qr/logo.ts`) downsizes any uploaded image to at most 256px on its longest side via a canvas draw before encoding to a data URL — keeps the (eventually DB-persisted, Module 3.5) `design_config` JSONB reasonably small regardless of the original upload's resolution.
+
+### Logo upload: a scope decision revised from Module 2.4/2.9
+
+The logo upload control has been disabled since Module 2.4, with a note that it needed Supabase Storage (Module 3.8). Revisited that assumption here: a **design** logo, unlike a **content** asset (PDF/image/video for file-based QR types, which genuinely is Module 3.8's subject), only needs to exist long enough to be composited into this session's live preview and downloads. It doesn't need server-side persistence until the QR code itself is saved (Module 3.5), at which point `design_config` — including the logo, stored as a data URL — is written as part of that save, the same as every other design field. Storage was never actually a hard requirement for the upload to _work_, only for it to _survive a saved QR code_, which is a later module's concern regardless. Logo upload is real now: `readLogoFile()` reads the file, downsizes it, and returns a data URL; `DesignLogoControls` shows a preview thumbnail and a "Remove logo" action once one is set.
+
+### Frame templates
+
+Three visually distinct styles, matching the existing `Select`'s options (`none`/`simple`/`rounded`/`badge`): `simple`/`rounded` wrap the QR (plus its quiet zone) in a colored border (rounded corners for `rounded`), with an optional bottom bar for `frame.ctaText`; `badge` skips the border entirely and shows only a colored bar with the CTA text below the QR, like a sticker/tag. CTA text is XML-escaped before being placed in the SVG (`escapeXml()`) — necessary correctness/robustness given the SVG is built by string concatenation and then injected via `dangerouslySetInnerHTML`, even though a user typing `<script>` into this specific field wouldn't execute as script through that injection path.
+
+### "Reset design" — a second, more precise reset
+
+`QRGeneratorShell`'s existing "Reset" (Module 2.4) already resets `design` back to `DEFAULT_DESIGN_CONFIG` as a side effect of resetting the whole form (name/content/mode/type too). The master prompt's "reset design" requirement is more precise — the Design panel now has its own "Reset design" button (`QRDesignPanel`) that resets only `design`, leaving name/content/mode/type untouched.
+
+### Verification
+
+- `tests/unit/qr/matrix.test.ts` (5 tests): finder-region geometry, dark-module presence, EC-level-driven size growth.
+- `tests/unit/qr/reliability.test.ts` (9 tests): contrast ratio math and warning threshold, logo-size clamping, EC-level recommendation.
+- `tests/unit/qr/styled-svg.test.ts` (13 tests): well-formed SVG output; pattern styles produce the right shape primitives; eye colors apply independently of data-module color; gradient defs appear and are referenced; contrast/logo-size warnings fire correctly; logo embeds (or doesn't) correctly; frame border/badge/CTA-escaping/no-frame-chrome cases; the fallback-on-throw path, forced and asserted directly.
+- `tests/unit/qr/styled-svg-png.test.ts` (4 tests): PNG data URL produced; the intermediate object URL is created exactly once and revoked exactly once (including on a forced canvas failure — the `finally` still runs); warnings pass through from the underlying SVG render.
+- `tests/unit/components/QRPreviewPanel.test.tsx` (+2 tests): a low-contrast design shows the warning inline; a clean design shows the plain "Scan to test." note instead.
+- `tests/unit/components/QRDesignPanel.test.tsx` (new, 3 tests): uploading a file produces a preview + "Remove logo" action and calls `onChange` with the right `assetUrl`; removing clears it; "Reset design" restores `DEFAULT_DESIGN_CONFIG` exactly. Uses a small stateful wrapper around `QRDesignPanel` so the test reflects real parent-controlled usage (matching how `QRGeneratorShell` actually wires it) rather than asserting only on the `onChange` call in isolation.
+- `tests/unit/components/QRDownloadActions.test.tsx` — extended its jsdom mocking (`Image`, `HTMLCanvasElement.getContext`/`toDataURL`) since the PNG path now goes through the styled SVG→canvas pipeline instead of the `qrcode` library's own Node-compatible PNG encoder.
+- `npm run typecheck`/`lint` (0 errors, same 8 pre-existing informational warnings)/`format:check`/`build` — pass. Suite: 159/159.
+- No live browser click-through this session either, for the same reason as Module 3.2 (Browser pane compositing issue) — not attempted a second time given the prior session's finding; automated coverage above is the verification record.
+
+### Acceptance status
+
+- [x] Required controls: foreground/background/transparent (Module 3.2) plus pattern style, corner square style, corner dot style, finder colors, gradient, logo upload/use, logo size constraints, logo margin/background, frame templates, frame CTA text, reset design — all real
+- [x] Reliability rules: contrast warning, safe logo-size limits, quiet zone, higher EC level with a logo, fallback on unsupported styling — all implemented as exercised behavior, not documentation-only
+- [x] Preview performance: debounced renders, no full-rerender loops, object URLs cleaned up, memory kept bounded via logo downsizing, form inputs stay responsive (debounce never blocks typing)

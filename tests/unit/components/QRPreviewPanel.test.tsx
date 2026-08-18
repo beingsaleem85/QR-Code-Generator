@@ -53,4 +53,37 @@ describe("QRPreviewPanel", () => {
     expect(screen.getByText("Enter content to preview your QR code.")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "QR code preview" })).not.toBeInTheDocument();
   });
+
+  it("shows a reliability warning inline when contrast is too low", async () => {
+    const design = {
+      ...DEFAULT_DESIGN_CONFIG,
+      colors: { ...DEFAULT_DESIGN_CONFIG.colors, foreground: "#f0f0f0", background: "#ffffff" },
+    };
+
+    render(
+      <QRPreviewPanel
+        qrType="url"
+        mode="static"
+        content={{ url: "example.com" }}
+        design={design}
+      />,
+    );
+
+    await screen.findByRole("img", { name: "QR code preview" });
+    expect(await screen.findByText(/contrast/i)).toBeInTheDocument();
+    expect(screen.queryByText("Scan to test.")).not.toBeInTheDocument();
+  });
+
+  it("shows the plain scan-to-test note when there are no warnings", async () => {
+    render(
+      <QRPreviewPanel
+        qrType="url"
+        mode="static"
+        content={{ url: "example.com" }}
+        design={DEFAULT_DESIGN_CONFIG}
+      />,
+    );
+
+    expect(await screen.findByText("Scan to test.")).toBeInTheDocument();
+  });
 });

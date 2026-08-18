@@ -5,12 +5,12 @@ Use this file to resume work without re-deriving context.
 ## Current State
 
 - **Phase:** 3 — Features (Phase 2 — UI is COMPLETE, gate passed)
-- **Current module:** 3.3 — QR Styling and Live Preview Engine (not yet started)
-- **Last completed module:** 3.2 — Static QR Generation (COMPLETE)
-- **Branch/commit:** local git repo (`master`). Check `git log --oneline -20` for the actual latest commit when resuming — as of writing, Modules 1.1–3.1 are committed and Module 3.2 is ready to commit.
+- **Current module:** 3.4 — QR Download and Export (not yet started)
+- **Last completed module:** 3.3 — QR Styling and Live Preview Engine (COMPLETE)
+- **Branch/commit:** local git repo (`master`). Check `git log --oneline -20` for the actual latest commit when resuming — as of writing, Modules 1.1–3.2 are committed and Module 3.3 is ready to commit.
 - **Supabase integration status:** **Live and connected.** Project URL + anon key are in `.env.local` (gitignored). The live project's schema (all 8 migrations) has been pushed and matches `supabase/migrations/`. Real signup/login/logout/session-persistence/password-recovery/profile-upsert are all wired and were verified end-to-end against the live project (see `docs/WORKLOG.md`'s Module 3.1 entry) — this is no longer mock data for auth.
-- **QR rendering status:** Real, via `qrcode` (npm) — `src/lib/qr/render.ts`. All 9 static types with implemented content forms (URL/Text/Email/Phone/SMS/WhatsApp/Wi-Fi/vCard/Event) render a genuine scannable QR in `QRPreviewPanel` and support real PNG/SVG download via `QRDownloadActions`. Only solid foreground/background/transparent-background colors are wired from `DesignConfig` — everything else in the Design panel (pattern, eyes, gradient, logo, frame) is still visually present but has no rendering effect yet; that's Module 3.3.
-- **Test status:** 123 unit/component tests passing. `typecheck`, `lint` (0 errors), `format:check`, and a fresh production `build` (25 routes) all pass.
+- **QR rendering status:** Fully real and fully styled. `src/lib/qr/matrix.ts` + `styled-svg.ts` render every design control (pattern, eye shapes/colors, gradient, logo overlay, frame+CTA) via a custom per-module SVG renderer — not just solid colors anymore (Module 3.2's boundary). `src/lib/qr/reliability.ts` implements contrast warnings, logo-size clamping, quiet zone, logo-driven error-correction bump, and a fallback-on-error path. Logo upload is real (client-side only, data URL — no Supabase Storage needed for this). `QRPreviewPanel` debounces re-render (200ms); `QRDownloadActions` downloads match the live preview exactly.
+- **Test status:** 159 unit/component tests passing. `typecheck`, `lint` (0 errors), `format:check`, and a fresh production `build` (25 routes) all pass.
 
 ## Relevant Commands
 
@@ -37,7 +37,7 @@ supabase db query --linked -o json   # ad-hoc read-only SQL against the live pro
 
 ## Current Blockers
 
-None. Module 3.3 doesn't need anything from the user to start.
+None. Module 3.4 doesn't need anything from the user to start.
 
 ## ⚠️ Read before doing browser-based verification
 
@@ -56,13 +56,14 @@ None. Module 3.3 doesn't need anything from the user to start.
 
 ## Next Exact Task
 
-Start Module 3.3 (QR Styling and Live Preview Engine) — re-read its full section in `QR_Code_Generator_Master_Build_Prompt.md` first; it's a substantial module, not a small extension of 3.2:
+Start Module 3.4 (QR Download and Export) — re-read its full section in `QR_Code_Generator_Master_Build_Prompt.md` first. Module 3.2 already shipped a _working default_ download (fixed 512px PNG, minimal filename slugification); this module is the _complete_ experience:
 
-1. **Required controls to make functional** (currently visible in `QRDesignPanel`/`design-controls.tsx` but inert beyond foreground/background/transparent-background, which Module 3.2 already wired): pattern style, corner square style, corner dot style, finder colors, gradient (if reliably supportable), logo upload/use, logo size constraints, logo margin/background, frame templates, frame CTA text, reset design. This needs a custom SVG-matrix renderer — `qrcode`'s built-in `color`/`margin` options (used in Module 3.2) aren't sufficient for per-module dot/eye shapes or logo compositing.
-2. **Reliability rules are explicit acceptance criteria, not optional polish**: strong contrast warning, safe logo-size limits, adequate quiet zone, sensible error-correction level when a logo is enabled, and a fallback when a styling option isn't supported by an export format. Build these in from the start rather than retrofitting.
-3. **Preview performance is also an explicit requirement**: avoid full rerender loops, debounce expensive renders, clean up generated object URLs (relevant if logo upload uses `URL.createObjectURL`), prevent memory leaks, keep form input responsive. `QRPreviewPanel`'s current `useEffect` re-renders on every `design.colors` change with no debounce — fine for solid colors (cheap), but likely needs debouncing once a full custom renderer is doing more work per change.
-4. `src/lib/qr/render.ts`'s `toQrColorOption()` boundary comment marks exactly what Module 3.2 did and didn't wire — read it before extending.
-5. Document in `docs/ARCHITECTURE.md`, mark Module 3.3 complete in `docs/WORKLOG.md`, commit. Continue autonomously into Module 3.4 (QR Download and Export — the _full_ download experience: resolution presets, complete filename policy, logo-in-export) afterward per the standing instruction, unless a blocking need arises.
+1. **Resolution presets**: 512/1024/2048px PNG options (the master prompt's own suggested values) — `QRDownloadActions`' `handleDownloadPng` currently hardcodes `renderStyledQrPngDataUrl`'s default width; add a size selector.
+2. **SVG stays vector-based** — already true (`renderStyledQrSvg()` output is real SVG, not a rasterized embed), just confirm this holds once resolution options exist for PNG.
+3. **Complete filename-sanitization policy** — `slugifyForFilename()` (`src/lib/qr/render.ts`) is explicitly a minimal placeholder (documented as such in Module 3.2/3.3); this module should decide what "complete" means here (uniqueness? length caps? reserved-word handling?) and implement it for real.
+4. **Acceptance criteria to verify explicitly**: logo appears correctly in the export (should already hold — downloads use the same `renderStyledQrSvg`/`renderStyledQrPngDataUrl` pipeline as the live preview, Module 3.3 — but verify, don't assume), transparent background behaves as expected in both formats, QR remains readable after export (tie into Module 3.3's reliability warnings if relevant), filename is sanitized.
+5. Optional/lower-priority per the master prompt: JPEG (only if it offers a clear benefit — probably skip, PNG/SVG already cover the real use cases), print PDF (only if reliably implementable — likely a stretch goal, not required for the gate).
+6. Document in `docs/ARCHITECTURE.md`, mark Module 3.4 complete in `docs/WORKLOG.md`, commit. Continue autonomously into Module 3.5 (Saving and Managing QR Codes — the first module that persists a QR code to the database, replacing `MOCK_QR_CODES`) afterward per the standing instruction, unless a blocking need arises.
 
 ## Notes for Future Sessions
 
@@ -74,7 +75,7 @@ Start Module 3.3 (QR Styling and Live Preview Engine) — re-read its full secti
 - **Auth is real now (Module 3.1)** — `src/lib/supabase/{client,server,dal,profile}.ts` + `src/proxy.ts` + `src/lib/supabase/actions.ts` (`logout()`). `proxy.ts` does the optimistic cookie check; `getAuthenticatedUser()` (DAL) is the mandatory database-verified re-check called from `(dashboard)/layout.tsx` — don't remove either half, they're deliberately layered per Next.js's own auth guidance, not redundant.
 - **Mock data still in use**: `src/lib/qr/mock-data.ts` (`MOCK_QR_CODES`, `findMockQrCode(id)`, `MOCK_ANALYTICS_NOW`, `MOCK_SCAN_EVENTS`), `src/lib/account/mock-data.ts` (`MOCK_PROFILE` — **known gap**, the real signed-in user's data isn't wired into the Account page yet, no master-prompt module explicitly owns this, see `docs/ARCHITECTURE.md`'s Module 3.1 section), `src/lib/files/mock-data.ts` (`MOCK_ASSETS`). These get replaced by their respective owning modules (3.5 for QR codes, 3.8 for files) — don't replace early just because auth is now real.
 - **Component architecture**: `QRTypeSelector`/`QRContentPanel` read from `qrTypeRegistry` (`src/lib/qr/registry.ts`) — never hardcode a QR type list. `DASHBOARD_NAV_ITEMS` is the single source for dashboard nav. `QrPlaceholderGraphic` is still used as the QR detail page's placeholder (real per-saved-QR rendering needs real content, which arrives with persistence in Module 3.5) and as a loading/invalid-content fallback in `QRPreviewPanel` — don't delete it. `src/lib/analytics/aggregate.ts` holds pure, reusable event-aggregation functions.
-- **QR rendering (Module 3.2)**: `src/lib/qr/render.ts` is the single source for turning validated content into a scannable QR — `buildQrPayload()` (validate + build), `renderQrSvg()`/`renderQrPngDataUrl()` (via `qrcode`), `slugifyForFilename()`. Only solid colors from `DesignConfig` are wired into rendering right now; extending to pattern/eyes/gradient/logo/frame needs a custom SVG-matrix renderer (Module 3.3), not just more `qrcode` options.
+- **QR rendering (Modules 3.2/3.3)**: `src/lib/qr/render.ts` — `buildQrPayload()` (validate content against the type's Zod schema, then build), `slugifyForFilename()` (still a minimal placeholder — Module 3.4 owns the real policy), plus the plain `renderQrSvg()`/`renderQrPngDataUrl()` kept as Module 3.3's error fallback only (don't call these directly from new UI — use the styled versions). `src/lib/qr/matrix.ts` (raw module matrix + finder-region geometry) and `src/lib/qr/styled-svg.ts` (`renderStyledQrSvg()`/`renderStyledQrPngDataUrl()` — the real, fully-styled renderer everything should call) are the current single sources of truth for turning content into a rendered QR. `src/lib/qr/reliability.ts` holds the contrast/logo-size/EC-level/quiet-zone rules — reuse these, don't reimplement. `src/lib/qr/logo.ts`'s `readLogoFile()` is the only place that should touch logo file input handling.
 - **jsdom gap, resolved**: `HTMLDialogElement.prototype.showModal`/`.close` are unimplemented in this project's jsdom version — polyfilled globally in `tests/setup.ts`.
 - **Known, accepted Next.js limitation**: `notFound()` on this app returns HTTP 200, not 404, because the root `src/app/loading.tsx` creates a Suspense boundary above every route and streaming locks in the already-sent 200 status before `notFound()` can run. Documented in `docs/ARCHITECTURE.md` under Module 2.7. Not a regression to "fix" reflexively if it resurfaces elsewhere.
 - **No charting library installed on purpose** (Module 2.8's charts are hand-rolled). Don't add one without a real reason.

@@ -633,3 +633,33 @@ Known issues:
 Next:
 
 - Module 3.3 — QR Styling and Live Preview Engine
+
+## Module 3.3 — QR Styling and Live Preview Engine
+
+Status: COMPLETE
+
+Completed:
+
+- `src/lib/qr/matrix.ts`: raw QR module matrix + finder-region detection, the shared foundation for real per-module styling.
+- `src/lib/qr/reliability.ts`: contrast-ratio warning, logo-size clamping, quiet-zone constant, logo-driven error-correction recommendation — the master prompt's "Reliability Rules" as real functions, not comments.
+- `src/lib/qr/styled-svg.ts`: `renderStyledQrSvg()` (custom per-module SVG: pattern/eye shapes, gradients, logo overlay, frame+CTA) and `renderStyledQrPngDataUrl()` (derives PNG from that same SVG via Image+canvas). Falls back to Module 3.2's plain renderer on any error.
+- `QRPreviewPanel` now debounces re-render (200ms) and shows reliability warnings inline instead of a generic "Scan to test" note when any apply.
+- `QRDownloadActions` uses the styled renderers, so downloads match the live preview exactly.
+- `DesignLogoControls`: real logo upload (`src/lib/qr/logo.ts`'s `readLogoFile()` — downsizes to ≤256px, returns a data URL), preview thumbnail, "Remove logo". Revises the Module 2.4/2.9-era assumption that this needed Supabase Storage first — full reasoning in `docs/ARCHITECTURE.md`.
+- `QRDesignPanel` gained its own "Reset design" button (resets only `design`, distinct from the generator shell's full-form reset).
+
+Verification:
+
+- New tests: `tests/unit/qr/matrix.test.ts` (5), `reliability.test.ts` (9), `styled-svg.test.ts` (13), `styled-svg-png.test.ts` (4), `tests/unit/components/QRDesignPanel.test.tsx` (3); extended `QRPreviewPanel.test.tsx` (+2) and `QRDownloadActions.test.tsx`'s jsdom mocks (Image/canvas, since PNG download now goes through the styled SVG→canvas pipeline).
+- `npm run typecheck` / `lint` (0 errors, same 8 pre-existing warnings) / `format:check` — pass
+- `rm -rf .next && npm run build` — pass, all 25 routes build
+- `npm run test` — **159/159 passing**
+- No live browser click-through attempted this session (same Browser-pane compositing limitation noted in Module 3.2 — not re-attempted a second time this session).
+
+Known issues:
+
+- None blocking. Live interactive browser verification of the design controls remains open for a future session with working Browser-pane compositing, same as Module 3.2.
+
+Next:
+
+- Module 3.4 — QR Download and Export
