@@ -686,3 +686,36 @@ The master prompt's Module 3.1 objective list is specifically "profile creation/
 - [x] Password recovery (real, live-verified request flow)
 - [x] Profile creation/upsert (real, live-verified against RLS)
 - [x] Service-role credentials never requested or exposed client-side (not needed until Module 3.7)
+
+## Static QR Generation (Module 3.2)
+
+Replaces `QrPlaceholderGraphic` in the generator flow with a genuinely scannable QR code, and gives the two disabled download buttons real behavior, for the 9 static types this project already has validated content forms for (Module 1.3/2.4): URL, Text, Email, Phone, SMS, WhatsApp, Wi-Fi, vCard, Event.
+
+### Library choice and the validate-then-build pipeline
+
+Added `qrcode` (npm) — the standard, actively-maintained package for QR image generation in both Node and browser bundles, with `@types/qrcode` for strict-mode TypeScript (the package itself ships no types). No wrapper/React-specific QR library was needed: `qrcode`'s `toString()` (SVG) and `toDataURL()` (PNG) are called directly.
+
+`src/lib/qr/render.ts`'s `buildQrPayload(qrType, content)` is the single gate every consumer goes through: it runs the type's own Zod schema (`definition.fields`, Module 1.3 — never redefined here) via `safeParse`, and only calls the registry's `payloadBuilder` on success. Returns `null` for anything incomplete/invalid, which both `QRPreviewPanel` and `QRDownloadActions` treat identically as "nothing to render yet" rather than each re-implementing validation.
+
+### Preview: real rendering, without preempting Module 3.3
+
+`QRPreviewPanel` now renders the actual generated SVG (`renderQrSvg()`, injected via `dangerouslySetInnerHTML` — safe here since the markup is entirely our own library's output, not user-supplied HTML). A closure/state ordering detail worth calling out: the async render result is stored as `{ payload, svg }`, and the component only uses `svg` when `rendered.payload === payload` at render time — deliberately avoiding a synchronous `setState(null)` inside the effect body to clear stale results, since the React Compiler's lint rule flags that pattern as cascading-render-prone. Checking equality at render time instead needed no state-clearing call at all.
+
+**Scope boundary, stated explicitly in code and here**: only `design.colors.foreground`/`background`/`transparentBackground` are wired into rendering. Dot style, eye shape/color, gradients, frames, and logo overlay all need a custom SVG-matrix renderer, not just an options object passed to `qrcode` — that is genuinely Module 3.3's ("QR Styling and Live Preview Engine") work, not a shortcut taken here. Wiring the two solid colors now (rather than none) was still the right call: leaving already-built, already-visible color pickers with zero effect would be exactly the kind of "looks interactive but isn't" control this project's own Module 2.9 reasoning (no fake toggles) argues against.
+
+### Download: a working default, not Module 3.4's full implementation
+
+`QRDownloadActions` gained real `Download PNG`/`Download SVG` handlers (`renderQrPngDataUrl()`/`renderQrSvg()`, triggered via a temporary `<a download>` element). Module 3.2's per-type acceptance criteria explicitly include "support download," and Module 3.4 ("QR Download and Export") is explicitly about the _full_ experience: resolution presets, complete filename-sanitization policy, logo compositing, transparent-background export nuances, possibly print PDF. To avoid either leaving download non-functional (failing 3.2's own criterion) or quietly doing 3.4's job, this module ships the minimum that makes download real and usable: a fixed 512px PNG width, and `slugifyForFilename()` — a genuinely minimal implementation (lowercase, non-alphanumeric runs collapsed to hyphens, `qr-code` fallback), not the eventual full sanitization/uniqueness policy. `Save QR` stays disabled (Module 3.5).
+
+### Verification
+
+- `tests/unit/qr/render.test.ts` (12 tests): `buildQrPayload` valid/invalid/no-builder-yet cases, Unicode content preserved through the built payload, SVG/PNG rendering succeed without throwing (including a Unicode payload), foreground color and transparent-background options are actually applied to the output, `slugifyForFilename` cases.
+- `tests/unit/components/QRPreviewPanel.test.tsx` (3 tests): placeholder shown for empty content; a real `<svg>` renders once content is valid; falls back to the placeholder again if content becomes invalid afterward (exercises the stale-result guard described above, not just the happy path).
+- `tests/unit/components/QRDownloadActions.test.tsx` (5 tests): both buttons disabled until content is valid; clicking each triggers a real download with the correct sanitized filename and correct data URL scheme (verified by spying on `document.createElement`/`HTMLAnchorElement.prototype.click`, not just checking the buttons don't throw); `Save QR` stays disabled.
+- `npm run typecheck`/`lint` (0 errors, same 8 pre-existing informational warnings)/`format:check`/`build` — pass. Suite: 123/123.
+- **Live browser click-through was attempted but not completed this session** — the Browser pane's frame-compositing limitation (previously documented in Module 2.3/2.4) recurred: `read_page`/`screenshot` returned empty/timed out for this route despite `get_page_text`/network/console tools working fine, and simulating a real keystroke via a scripted native-input-value + dispatched `input` event did not reach React Hook Form's `watch()` subscription in this environment (root cause not fully isolated — plausibly a React 19 internals difference from the classic React 16-era "native setter" trick, which predates this project's React version). Rather than either falsely claim a live click-through happened or silently skip verification, this is recorded honestly: the component/unit tests above exercise the real library and real component code paths (including real `userEvent` typing, which is a more faithful interaction simulation than the Browser-pane workaround attempted here), and a production build succeeds and serves the route correctly via `curl`. Genuine live browser verification of this specific flow remains open — worth revisiting if the Browser pane's compositing/environment issue resolves.
+
+### Acceptance status
+
+- [x] All 9 static types: validate required fields (existing Module 1.3 schemas, re-used not re-implemented), build a correct encoded payload, generate a scannable QR, update preview, support download, preserve Unicode
+- [x] Every type has at least a valid case, invalid case, and Unicode/special-character case under automated test (payload-builder tests from Module 1.3, plus this module's rendering-level tests)

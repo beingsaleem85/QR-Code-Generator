@@ -605,3 +605,31 @@ Known issues:
 Next:
 
 - Module 3.2 — Static QR Generation
+
+## Module 3.2 — Static QR Generation
+
+Status: COMPLETE
+
+Completed:
+
+- Installed `qrcode` + `@types/qrcode`. Added `src/lib/qr/render.ts`: `buildQrPayload()` (validates content against the type's existing Zod schema, then calls the existing registry payload builder — nothing re-implemented from Module 1.3), `renderQrSvg()`/`renderQrPngDataUrl()` (wrap `qrcode`'s `toString`/`toDataURL`, applying only the two solid colors from `DesignConfig`), `slugifyForFilename()`.
+- `QRPreviewPanel` now renders a real, scannable QR (was `QrPlaceholderGraphic`) for all 9 static types with implemented content forms.
+- `QRDownloadActions` gained working `Download PNG`/`Download SVG` buttons (`Save QR` stays disabled — Module 3.5).
+- Full reasoning for the Module 3.2/3.3/3.4 scope boundaries (why only solid colors, why download is minimal-but-real rather than 3.4's full implementation) is in `docs/ARCHITECTURE.md`.
+
+Verification:
+
+- New `tests/unit/qr/render.test.ts` (12 tests) and rewritten/new component tests `QRPreviewPanel.test.tsx` (3) + `QRDownloadActions.test.tsx` (5) — see `docs/ARCHITECTURE.md` for what each covers.
+- `npm run typecheck` / `lint` (0 errors, same 8 pre-existing warnings) / `format:check` — pass
+- `rm -rf .next && npm run build` — pass, all 25 routes build
+- `npm run test` — **123/123 passing**
+- **Live browser click-through attempted, not completed**: the Browser pane's compositing limitation recurred (`read_page`/`screenshot` failed for this route this session) and a scripted native-input-value simulation didn't reach React Hook Form's `watch()` subscription in this environment. Not glossed over — recorded honestly in `docs/ARCHITECTURE.md` along with what _was_ verified (real component tests exercising the real library via real `userEvent` typing, a real production build, `curl` confirming the route serves). Worth a real click-through if the Browser pane's environment issue is resolved in a future session.
+- One operational note: while stopping this session's dev server, used `Get-NetTCPConnection -LocalPort 3000` to find the exact PID and `Stop-Process -Id <pid>` — not a broad `taskkill /IM node.exe` (the mistake made in Module 3.1) — confirming the fix documented in `docs/SESSION_HANDOFF.md` holds.
+
+Known issues:
+
+- None blocking. Live interactive browser verification of the generator's preview/download UI (as opposed to its underlying logic, which is thoroughly tested) remains open for a future session with working Browser-pane compositing.
+
+Next:
+
+- Module 3.3 — QR Styling and Live Preview Engine

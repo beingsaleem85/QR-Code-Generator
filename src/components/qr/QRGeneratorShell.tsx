@@ -137,7 +137,7 @@ export function QRGeneratorShell({ variant = "create", initialName = "" }: QRGen
 
         <div className="flex flex-col gap-4 lg:sticky lg:top-20 lg:self-start">
           <QRPreviewPanel qrType={qrType} mode={mode} content={content} design={design} />
-          <QRDownloadActions />
+          <QRDownloadActions qrType={qrType} content={content} design={design} name={name} />
         </div>
       </div>
     </div>
