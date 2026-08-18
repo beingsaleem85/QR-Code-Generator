@@ -59,7 +59,7 @@ describe("GET /r/[slug]", () => {
     expect(await response.json()).toEqual({ error: "inactive" });
   });
 
-  it("records a scan (with the referrer header) without delaying the redirect", async () => {
+  it("records a scan (referrer, user-agent, edge country header) without delaying the redirect", async () => {
     resolveDynamicQrRedirect.mockResolvedValue({
       status: "ok",
       destinationUrl: "https://example.com",
@@ -68,13 +68,54 @@ describe("GET /r/[slug]", () => {
 
     await GET(
       new Request("https://app.example/r/abc12345", {
-        headers: { referer: "https://google.com" },
+        headers: {
+          referer: "https://google.com",
+          "user-agent": "TestAgent/1.0",
+          "x-vercel-ip-country": "US",
+        },
       }),
       makeContext("abc12345"),
     );
 
     expect(after).toHaveBeenCalledOnce();
-    expect(recordQrScan).toHaveBeenCalledWith("abc12345", "https://google.com");
+    expect(recordQrScan).toHaveBeenCalledWith("abc12345", {
+      referrer: "https://google.com",
+      userAgent: "TestAgent/1.0",
+      countryCode: "US",
+    });
+  });
+
+  it("falls back to Cloudflare's country header when Vercel's isn't present", async () => {
+    resolveDynamicQrRedirect.mockResolvedValue({
+      status: "ok",
+      destinationUrl: "https://example.com",
+    });
+    const { GET } = await import("@/app/r/[slug]/route");
+
+    await GET(
+      new Request("https://app.example/r/abc12345", { headers: { "cf-ipcountry": "DE" } }),
+      makeContext("abc12345"),
+    );
+
+    expect(recordQrScan).toHaveBeenCalledWith(
+      "abc12345",
+      expect.objectContaining({ countryCode: "DE" }),
+    );
+  });
+
+  it("passes a null country code when neither edge header is present", async () => {
+    resolveDynamicQrRedirect.mockResolvedValue({
+      status: "ok",
+      destinationUrl: "https://example.com",
+    });
+    const { GET } = await import("@/app/r/[slug]/route");
+
+    await GET(new Request("https://app.example/r/abc12345"), makeContext("abc12345"));
+
+    expect(recordQrScan).toHaveBeenCalledWith(
+      "abc12345",
+      expect.objectContaining({ countryCode: null }),
+    );
   });
 
   it("never records a scan for a not_found or inactive resolution", async () => {

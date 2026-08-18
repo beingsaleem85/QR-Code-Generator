@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { AnalyticsView } from "@/components/analytics/AnalyticsView";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { Alert } from "@/components/ui/Alert";
-import { getQrCodeById } from "@/lib/qr/queries";
+import { getQrCodeById, listScanEvents } from "@/lib/qr/queries";
 import { toQrCodeSummary } from "@/lib/qr/records";
 
 export default async function QrCodeAnalyticsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -13,19 +13,17 @@ export default async function QrCodeAnalyticsPage({ params }: { params: Promise<
     notFound();
   }
 
+  const events = qrCode.mode === "dynamic" ? await listScanEvents(qrCode.id) : [];
+
   return (
     <div className="flex flex-col gap-6">
       <DashboardHeader title={`Analytics: ${qrCode.name}`} />
 
       <div className="px-4 pb-6 sm:px-6">
         {qrCode.mode === "dynamic" ? (
-          // Real QR, genuinely zero real scan events — scan tracking itself
-          // is Module 3.7's job. This honestly reflects that (an empty
-          // dataset AnalyticsView already renders as "no scans yet"),
-          // rather than a separate "coming soon" state duplicating that UI.
           <AnalyticsView
             qrCode={toQrCodeSummary(qrCode)}
-            events={[]}
+            events={events}
             now={new Date().toISOString()}
           />
         ) : (

@@ -10,6 +10,18 @@ import { recordQrScan } from "@/lib/qr/scan-tracking";
  */
 export const dynamic = "force-dynamic";
 
+/**
+ * Coarse geolocation "if available and legally appropriate" (Module 3.7):
+ * reads whichever edge platform's own country header is present rather
+ * than calling a geo-IP service — zero added latency, no third-party data
+ * sharing, and genuinely absent (not guessed) on hosting that provides
+ * neither. Vercel and Cloudflare are the two most common fronts for a
+ * Next.js app; add another header here if a different platform is used.
+ */
+function readEdgeCountryCode(headers: Headers): string | null {
+  return headers.get("x-vercel-ip-country") ?? headers.get("cf-ipcountry");
+}
+
 export async function GET(request: Request, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params;
   const resolution = await resolveDynamicQrRedirect(slug);
@@ -23,8 +35,14 @@ export async function GET(request: Request, context: { params: Promise<{ slug: s
 
   // Scheduled via `after()` so recording a scan never delays the redirect
   // itself — the visitor gets sent on their way immediately either way.
-  const referrer = request.headers.get("referer");
-  after(() => recordQrScan(slug, referrer));
+  // Headers are read now, synchronously, and passed in — not re-read
+  // inside the `after()` callback.
+  const metadata = {
+    referrer: request.headers.get("referer"),
+    userAgent: request.headers.get("user-agent"),
+    countryCode: readEdgeCountryCode(request.headers),
+  };
+  after(() => recordQrScan(slug, metadata));
 
   return NextResponse.redirect(resolution.destinationUrl);
 }

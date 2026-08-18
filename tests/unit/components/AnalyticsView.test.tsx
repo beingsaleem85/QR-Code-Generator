@@ -111,6 +111,24 @@ describe("AnalyticsView", () => {
     expect(screen.getAllByText("No scans in this range").length).toBeGreaterThan(0);
   });
 
+  it("hides the country filter and panel entirely when no scan has a known country", () => {
+    const eventsWithoutCountry: QrScanEvent[] = [
+      {
+        scannedAt: "2026-08-12T09:00:00.000Z",
+        countryCode: null,
+        deviceType: "mobile",
+        os: "iOS",
+        browser: "Safari",
+      },
+    ];
+
+    render(<AnalyticsView qrCode={BASE_QR} events={eventsWithoutCountry} now={NOW} />);
+
+    expect(screen.queryByLabelText("Filter by country")).not.toBeInTheDocument();
+    expect(screen.queryByText("Country", { selector: "p" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Top country")).not.toBeInTheDocument();
+  });
+
   it("filters the country distribution when a country filter is applied", async () => {
     const user = userEvent.setup();
     render(<AnalyticsView qrCode={BASE_QR} events={EVENTS} now={NOW} />);

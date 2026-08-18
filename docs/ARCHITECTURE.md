@@ -896,7 +896,7 @@ A full real-browser click-through of save → list → detail → edit → dupli
 
 ### The core fix: a dynamic QR encodes this app's own link, never the raw destination
 
-Through Module 3.5, `mode: "dynamic"` was accepted end-to-end (saved, listed, edited) but nothing actually made a dynamic QR's *encoded image* different from a static one's — both rendered straight from `buildQrPayload(qrType, content)`. That defeats the entire premise of "dynamic": if the printed code encodes the raw URL directly, changing the destination later would require reprinting it, and no scan could ever be counted. The fix is `resolveEncodedPayload(mode, qrType, content, slug)` (`src/lib/qr/render.ts`) — a static QR still encodes its content directly; a dynamic QR always encodes `buildRedirectUrl(slug)` (`src/lib/qr/redirect-url.ts`, `{NEXT_PUBLIC_APP_URL}/r/{slug}`) instead, regardless of content. This one function is now the sole call site used by `QRPreviewPanel`, `QRDownloadActions`, `QRCodeRowActions`'s regenerate-and-download, and the QR detail page's server-rendered preview — there is no second place that could drift out of sync with this rule.
+Through Module 3.5, `mode: "dynamic"` was accepted end-to-end (saved, listed, edited) but nothing actually made a dynamic QR's _encoded image_ different from a static one's — both rendered straight from `buildQrPayload(qrType, content)`. That defeats the entire premise of "dynamic": if the printed code encodes the raw URL directly, changing the destination later would require reprinting it, and no scan could ever be counted. The fix is `resolveEncodedPayload(mode, qrType, content, slug)` (`src/lib/qr/render.ts`) — a static QR still encodes its content directly; a dynamic QR always encodes `buildRedirectUrl(slug)` (`src/lib/qr/redirect-url.ts`, `{NEXT_PUBLIC_APP_URL}/r/{slug}`) instead, regardless of content. This one function is now the sole call site used by `QRPreviewPanel`, `QRDownloadActions`, `QRCodeRowActions`'s regenerate-and-download, and the QR detail page's server-rendered preview — there is no second place that could drift out of sync with this rule.
 
 A brand-new dynamic QR has no slug (and so no valid `/r/[slug]` link) until its first save issues one — `QRPreviewPanel`/`QRDownloadActions` show an explicit "Save to generate your scannable dynamic QR code" state in that window rather than rendering nothing, or worse, silently falling back to the raw content.
 
@@ -952,3 +952,80 @@ Direct SQL (via `supabase db query --linked`, an elevated connection) proves the
 - [x] Pause/reactivate a dynamic QR
 - [x] `/r/[slug]` resolves efficiently, rejects missing/invalid/inactive cleanly (404/410), records a scan without blocking the redirect, redirects safely, prevents open-redirect abuse (http/https-only, enforced at redirect time not just input time), never exposes an internal database id, and propagates destination edits with no caching
 - [x] Slugs are URL-safe, non-sequential, and unique (unchanged from Module 3.5 — `generateRandomSlug()`, DB-unique-constraint-enforced with retry)
+
+## Scan Analytics (Module 3.7)
+
+### Exactly what's collected, and why nothing more
+
+Per scan, on a resolved dynamic QR only: `scanned_at` (timestamp), `qr_code_id`, `device_type`/`os`/`browser` (parsed from the request's own `User-Agent` header — never a third-party lookup), `referrer` (the request's `Referer` header, verbatim), and `country_code` (only when the hosting platform's own edge network provides one — see below). That's it. `ip_hash` (Module 1.4's column) stays unpopulated — there is no documented product/legal need for it yet, and the master prompt's own instruction is "do not persist raw IP by default," which this satisfies by never touching IP at all, not by hashing it. No visitor identifier of any kind is stored, which is also why there's no "unique visitors" metric anywhere in this module — that would require an identifier this schema deliberately doesn't have (see `QrScanEvent`'s own doc comment, Module 2.8).
+
+### Device/OS/browser: parsed locally, not via a dependency
+
+`src/lib/qr/user-agent.ts`'s `parseUserAgent()` is a small, hand-rolled classifier — not a UA-parsing library. The master prompt asks for "device class, OS, browser" as privacy-safe signals, not exhaustive parsing precision, and this project has consistently preferred a small, fully-testable function over a new dependency where one suffices (the hand-rolled charts in Module 2.8 are the same call). Ordering is the only real subtlety and is deliberately tested: Edge's and Opera's own User-Agent strings both contain `"Chrome"` (for site-compatibility reasons going back decades), so Edge/Opera must be checked before Chrome; iOS User-Agent strings contain the literal substring `"like Mac OS X"`, so iOS must be checked before macOS. An unclassifiable device falls back to `"unknown"` (a real `ScanDeviceType` value, not a guess dressed as `"desktop"`).
+
+### Coarse geolocation: a header read, never a geo-IP call
+
+"Coarse geolocation if available and legally appropriate" is implemented as reading whichever edge-network header a hosting platform already attaches for free — `x-vercel-ip-country` (Vercel) or `cf-ipcountry` (Cloudflare), the two most common fronts for a Next.js app (`readEdgeCountryCode()`, `src/app/r/[slug]/route.ts`). This was chosen deliberately over a paid/third-party geo-IP API: it adds zero latency (a header read, not a network call), shares no visitor data with a third party, and is honestly absent — `null`, not guessed — on any hosting that provides neither header, including local development. `QrScanEvent.countryCode` is nullable end-to-end specifically to keep this honest: a country of `null` means "not collected here," never "unknown location for a collected event."
+
+### "Aggregate only where the data genuinely supports it" — not just where a field exists
+
+Every `qr_scan_events` row _has_ a `country_code` column, but on hosting without an edge geo header, every value in it is `null` — technically "the data," but not data that supports a meaningful "scans by country" chart. `AnalyticsView` checks `events.some(hasCountry)` once and, when false, omits the Country filter dropdown, the Country summary card, and the Country distribution panel entirely, rather than rendering a chart that would just say "100% Unknown." Device/OS/browser don't get this treatment — a User-Agent is present on essentially every real HTTP request, so those three are always genuinely supported and always render.
+
+### Efficient queries, deliberately not pre-aggregated
+
+`listScanEvents()` (`src/lib/qr/queries.ts`) is one RLS-scoped query — `.eq("qr_code_id", id).gte("scanned_at", <30 days ago>).order("scanned_at")` — served entirely by the composite `(qr_code_id, scanned_at)` index Module 1.4 already created; no new index needed. The result feeds Module 2.8's existing, already-tested pure functions in `src/lib/analytics/aggregate.ts` (`filterEventsByRange`, `countScansOverTime`, `countByField`, `countByHour`) for total/by-day/by-country/by-device/by-browser-and-OS, rather than five separate SQL `GROUP BY` queries or a rollup table. The master prompt explicitly permits this ("do not prematurely add complexity if raw events are sufficient for expected volume") — this product has no real usage yet, so building rollups/materialized summaries/cached counters now would be optimizing for a scale that doesn't exist. The 30-day bound (the widest range `AnalyticsView`'s own date-range filter offers) keeps the query itself efficient regardless, and keeps every stat on the page internally consistent — nothing implies "all-time" from a query that only ever fetches a window. `scan_count_cached` (Module 3.6, updated atomically by `record_qr_scan`) is still what "Total scans" displays — an all-time count that doesn't need the events themselves at all.
+
+### Redirect performance: unchanged, verified again
+
+Scan recording was already moved off the response's critical path in Module 3.6 (`after()`). This module adds work _inside_ that same deferred callback (UA parsing, an extra RPC parameter) — none of it can delay the redirect, because it never runs before `NextResponse.redirect()` is returned. Headers are still read synchronously in the handler body and only the already-extracted values are closed over by `after()`, unchanged from Module 3.6.
+
+### Privacy disclosure
+
+The master prompt requires analytics be disclosed in the Privacy Policy before production. `/privacy` is still an intentional stub (Module 2.2) with its real legal copy owned by Module 3.15 ("Legal and Privacy Readiness") — writing throwaway disclosure language into the stub now that 3.15 would just rewrite isn't the right call, so instead the stub's own description text was updated to carry the exact list of what's collected forward, so Module 3.15 can't miss it. The full list is documented above, in this section, as the source of truth in the meantime.
+
+### Verification
+
+- New tests (25): `user-agent.test.ts` (12), `scan-records.test.ts` (4, the `qr_scan_events` row mapper), `queries.test.ts` (+3, `listScanEvents`), `scan-tracking.test.ts` (rewritten, 4), `r-slug-route.test.ts` (+2, edge country-header handling), `AnalyticsView.test.tsx` (+1, no-country-data UI).
+- `npm run typecheck`/`lint` (0 errors, same 8 pre-existing informational warnings)/`format:check`/`build` — all pass.
+- `npm run test` — **272/272 passing**.
+- **Live verification against the real Supabase project**: pushed the migration extending `record_qr_scan`; confirmed via `pg_proc` that the old 5-argument overload was actually dropped, not left as unused schema clutter alongside the new one. Provisioned one throwaway confirmed account, seeded one dynamic QR, and drove a real scan through the actual `/r/[slug]` route from the Browser pane with a spoofed `x-vercel-ip-country: US` header (the User-Agent itself was the Browser pane's own real one, not spoofed — Chrome/Windows). The resulting `qr_scan_events` row: `country_code: "US"`, `device_type: "desktop"`, `os: "Windows"`, `browser: "Chrome"`, `referrer` all correct. Logged into the real dashboard as that account and loaded the real analytics page — every number (Total/24h/7d/30d scans, Top country, Top device, all four distribution panels, all three filters) matched that one real event exactly. Cleanup: deleted the test QR (scan events cascade via the existing FK), deleted the throwaway account, restored `mailer_autoconfirm` to `false`; confirmed `count(*) = 0` on both `qr_codes` and `auth.users` afterward.
+
+### Acceptance status
+
+- [x] Real scan-event collection (via the same Module 3.6 `SECURITY DEFINER` path, extended, not a new privileged surface)
+- [x] Privacy-minimized metadata: no raw IP, no visitor identifier, country only via a free platform header and never guessed
+- [x] Total scans, scans over time, country/device/browser/OS aggregation — country only rendered where the collected data genuinely supports it
+- [x] Efficient Supabase queries (one indexed, range-bounded read; no premature rollups)
+- [x] Real dashboard analytics wiring (`listScanEvents()` replaces Module 3.5's honest `events: []` placeholder)
+- [x] Correct empty/loading/error states (true-empty and range-empty from Module 2.8, unchanged; loading/error from the existing root boundaries)
+- [x] `/r/[slug]` redirect performance preserved — scan recording (now doing more work) still runs entirely inside `after()`, verified again live
+- [x] No raw IP stored by default
+- [x] Live-verified against the real Supabase project with throwaway test data, fully cleaned up afterward
+
+## Account Entitlements — Permanent Pro Account Infrastructure
+
+Not a numbered master-prompt module — an out-of-band operational request (a real, permanent Lifetime Pro owner account, `mts.pk@hotmail.com`) that also required _some_ server-controlled plan concept to exist before it could be granted safely. Built as the minimum needed for that, kept deliberately extensible for real Free/Pro/subscription plans later.
+
+### Why a dedicated table, not `app_metadata`
+
+Two ways to store a plan were considered: Supabase Auth's `app_metadata` (client-unwritable, but only ever writable _by the server_ via the Admin API, i.e. the service-role key), or a normal Postgres table gated by RLS. The table won: it needs no new privileged secret (`SUPABASE_SERVICE_ROLE_KEY` stays blank, same as every other module so far — this project has consistently avoided it), it fits this project's already-established pattern of "RLS decides who can read/write, not application code" instead of a second, parallel authorization mechanism living in Auth's own metadata, and it's far easier to extend later (billing period, `stripe_customer_id`, plan history) than nested JSON in `app_metadata` would be.
+
+### `account_entitlements` — read-your-own, write-nobody
+
+`supabase/migrations/20260819120000_create_account_entitlements.sql`: `user_id` (unique, FK to `auth.users`, cascade-deleted with the user), `plan` (`free`/`pro`), `is_lifetime`, `expires_at` (nullable — null means "does not expire"; a check constraint forbids `is_lifetime = true` with a non-null `expires_at`, so the two fields can't disagree). RLS enables exactly one policy: `select` for `auth.uid() = user_id`. There is **no insert/update/delete policy for any role** — not "authenticated users can update their own row with a restricted column list," which is a much weaker guarantee and easy to get subtly wrong (e.g. forgetting to exclude `plan` from an otherwise-reasonable "update your own settings" policy) — but no write path from the client at all. A missing row means "free" by convention (`getMyEntitlement()`, `src/lib/account/entitlements.ts`) — there's no signup trigger creating a default row, since "no row" already means exactly the right thing.
+
+Verified live, not just by reading the policy: signed in as the real permanent account and attempted to update its own `plan` to `'free'` — the client call returned no error but affected 0 rows (RLS silently filters non-matching rows rather than erroring, standard Postgres RLS behavior for a missing policy). Signed in as a second, unrelated account and attempted to read the permanent account's entitlement (0 rows returned — indistinguishable from nonexistent, same pattern used everywhere else in this schema), update it (0 rows affected), and insert a `pro` row for itself directly (this one _does_ error — `INSERT`'s `WITH CHECK` clause rejects outright rather than silently filtering). Every attempt failed to change anything, from every angle tested.
+
+### The permanent account
+
+`mts.pk@hotmail.com` — Lifetime Pro owner account. Created via the same `mailer_autoconfirm` toggle-and-restore technique as every throwaway verification account this session (Module 3.6/3.7), the only difference being this one is never deleted. Its `account_entitlements` row was written directly via privileged CLI access (`plan = 'pro'`, `is_lifetime = true`, `expires_at = null`) — the same "only a direct, privileged database operation can grant/change an entitlement" rule the RLS policy above enforces for everyone else. Its plaintext password exists only in Supabase Auth's own password store; it was never written to any file in this repository (a temporary provisioning script lived only in the session scratchpad and was deleted before this commit — `git grep` for the password string returns nothing).
+
+### UI
+
+`/dashboard/account` gained a small "Plan" card showing `Free`/`Pro`/`Lifetime Pro` (`planLabel()`) for whoever is actually signed in — real end-to-end via `getMyEntitlement()`, independent of the rest of that page's still-`MOCK_PROFILE`-driven content (a known, already-documented gap from Module 3.1, unrelated to this addition). No billing UI, no upgrade flow, no plan-selection form — the master prompt for this request was explicit that a full billing system isn't in scope, only "the minimum secure entitlement infrastructure required... and future plan checks."
+
+### Verification
+
+- New tests: `entitlements.test.ts` (7) — free-for-unauthenticated, free-for-missing-row, real pro/lifetime mapping, free-on-query-error, and `planLabel()`'s three label cases.
+- `npm run typecheck`/`lint`/`format:check`/`build` — all pass (folded into the same verification pass as Module 3.7 below).
+- **Live verification against the real Supabase project**: account created and confirmed (`confirmed_at`/`email_confirmed_at` both set), `profiles` row present, `account_entitlements` row present with the exact required values, login with the real password succeeds, logout-then-login-again succeeds, and all four RLS-bypass attempts above failed exactly as intended. Confirmed a second time, after all Module 3.7 test-data cleanup ran, that the account/profile/entitlement were all still fully intact — cleanup queries never touched anything but the specific throwaway ids created for that module's own verification.

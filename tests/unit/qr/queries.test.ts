@@ -6,6 +6,7 @@ function createChain(result: { data?: unknown; error?: unknown }) {
     select: vi.fn(() => chain),
     eq: vi.fn(() => chain),
     neq: vi.fn(() => chain),
+    gte: vi.fn(() => chain),
     order: vi.fn(() => chain),
     maybeSingle: vi.fn(() => Promise.resolve(result)),
     then: (resolve: (value: typeof result) => void) => resolve(result),
@@ -108,5 +109,49 @@ describe("getQrCodeById", () => {
     const { getQrCodeById } = await loadQueries(chain);
 
     expect(await getQrCodeById("someone-elses-id")).toBeNull();
+  });
+});
+
+const SCAN_EVENT_ROW = {
+  scanned_at: "2026-08-12T09:00:00.000Z",
+  country_code: "US",
+  device_type: "mobile",
+  os: "iOS",
+  browser: "Safari",
+};
+
+describe("listScanEvents", () => {
+  it("maps every returned row to a QrScanEvent", async () => {
+    const chain = createChain({ data: [SCAN_EVENT_ROW], error: null });
+    const { listScanEvents } = await loadQueries(chain);
+
+    const events = await listScanEvents("qr-1");
+
+    expect(events).toEqual([
+      {
+        scannedAt: "2026-08-12T09:00:00.000Z",
+        countryCode: "US",
+        deviceType: "mobile",
+        os: "iOS",
+        browser: "Safari",
+      },
+    ]);
+  });
+
+  it("scopes the query to the given QR code and a bounded time window", async () => {
+    const chain = createChain({ data: [], error: null });
+    const { listScanEvents } = await loadQueries(chain);
+
+    await listScanEvents("qr-1");
+
+    expect(chain.eq).toHaveBeenCalledWith("qr_code_id", "qr-1");
+    expect(chain.gte).toHaveBeenCalledWith("scanned_at", expect.any(String));
+  });
+
+  it("throws on a real database error rather than silently returning an empty list", async () => {
+    const chain = createChain({ data: null, error: { message: "connection failed" } });
+    const { listScanEvents } = await loadQueries(chain);
+
+    await expect(listScanEvents("qr-1")).rejects.toThrow("connection failed");
   });
 });

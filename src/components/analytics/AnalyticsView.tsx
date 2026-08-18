@@ -20,6 +20,10 @@ function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+function hasCountry(event: QrScanEvent): event is QrScanEvent & { countryCode: string } {
+  return event.countryCode !== null;
+}
+
 interface AnalyticsViewProps {
   qrCode: QRCodeSummary;
   events: QrScanEvent[];
@@ -33,9 +37,16 @@ export function AnalyticsView({ qrCode, events, now }: AnalyticsViewProps) {
 
   const nowDate = useMemo(() => new Date(now), [now]);
 
+  // Country is only ever populated from a platform-provided edge header
+  // (Module 3.7) — genuinely absent, not just empty, on hosting that
+  // doesn't provide one. Aggregating/filtering by it only when at least one
+  // real event has it avoids rendering a misleading "100% Unknown" chart.
+  const hasCountryData = useMemo(() => events.some(hasCountry), [events]);
+  const eventsWithCountry = useMemo(() => events.filter(hasCountry), [events]);
+
   const countryOptions = useMemo(
-    () => Array.from(new Set(events.map((event) => event.countryCode))).sort(),
-    [events],
+    () => Array.from(new Set(eventsWithCountry.map((event) => event.countryCode))).sort(),
+    [eventsWithCountry],
   );
   const deviceOptions = useMemo(
     () => Array.from(new Set(events.map((event) => event.deviceType))).sort(),
@@ -49,7 +60,6 @@ export function AnalyticsView({ qrCode, events, now }: AnalyticsViewProps) {
     return result;
   }, [events, dateRange, nowDate, country, device]);
 
-  const overallTopCountry = countByField(events, "countryCode")[0]?.label ?? "—";
   const overallTopDevice = countByField(events, "deviceType")[0]?.label ?? "—";
 
   const summaryCards = [
@@ -63,7 +73,14 @@ export function AnalyticsView({ qrCode, events, now }: AnalyticsViewProps) {
       label: "Last 30d",
       value: filterEventsByRange(events, "30d", nowDate).length.toLocaleString(),
     },
-    { label: "Top country", value: overallTopCountry },
+    ...(hasCountryData
+      ? [
+          {
+            label: "Top country",
+            value: countByField(eventsWithCountry, "countryCode")[0]?.label ?? "—",
+          },
+        ]
+      : []),
     { label: "Top device", value: overallTopDevice ? capitalize(overallTopDevice) : "—" },
   ];
 
@@ -86,7 +103,9 @@ export function AnalyticsView({ qrCode, events, now }: AnalyticsViewProps) {
           value: bucket.count,
         }));
 
-  const countryDistribution = countByField(chartEvents, "countryCode");
+  const countryDistribution = hasCountryData
+    ? countByField(chartEvents.filter(hasCountry), "countryCode")
+    : [];
   const deviceDistribution = countByField(chartEvents, "deviceType");
   const osDistribution = countByField(chartEvents, "os");
   const browserDistribution = countByField(chartEvents, "browser");
@@ -104,6 +123,7 @@ export function AnalyticsView({ qrCode, events, now }: AnalyticsViewProps) {
       <AnalyticsFilters
         dateRange={dateRange}
         onDateRangeChange={setDateRange}
+        showCountryFilter={hasCountryData}
         countryOptions={countryOptions}
         country={country}
         onCountryChange={setCountry}
@@ -129,11 +149,13 @@ export function AnalyticsView({ qrCode, events, now }: AnalyticsViewProps) {
           ) : undefined}
         </AnalyticsChartShell>
 
-        <AnalyticsChartShell title="Country" emptyLabel={rangeEmptyLabel}>
-          {countryDistribution.length > 0 ? (
-            <DistributionList entries={countryDistribution} />
-          ) : undefined}
-        </AnalyticsChartShell>
+        {hasCountryData ? (
+          <AnalyticsChartShell title="Country" emptyLabel={rangeEmptyLabel}>
+            {countryDistribution.length > 0 ? (
+              <DistributionList entries={countryDistribution} />
+            ) : undefined}
+          </AnalyticsChartShell>
+        ) : null}
 
         <AnalyticsChartShell title="Device type" emptyLabel={rangeEmptyLabel}>
           {deviceDistribution.length > 0 ? (

@@ -12,6 +12,11 @@ const DATE_RANGES: { value: AnalyticsDateRange; label: string }[] = [
 interface AnalyticsFiltersProps {
   dateRange: AnalyticsDateRange;
   onDateRangeChange: (range: AnalyticsDateRange) => void;
+  /** Hides the country filter entirely when no scan has a known country
+   * (Module 3.7) — country is only ever collected via a platform-provided
+   * edge header, so it can be genuinely absent for every event. Defaults
+   * to true so existing callers/tests with real country data are unaffected. */
+  showCountryFilter?: boolean;
   countryOptions: string[];
   country: string;
   onCountryChange: (country: string) => void;
@@ -23,6 +28,7 @@ interface AnalyticsFiltersProps {
 export function AnalyticsFilters({
   dateRange,
   onDateRangeChange,
+  showCountryFilter = true,
   countryOptions,
   country,
   onCountryChange,
@@ -50,21 +56,23 @@ export function AnalyticsFilters({
         ))}
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-muted-foreground">
-        Country
-        <Select
-          aria-label="Filter by country"
-          value={country}
-          onChange={(event) => onCountryChange(event.target.value)}
-        >
-          <option value="">All</option>
-          {countryOptions.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </Select>
-      </label>
+      {showCountryFilter ? (
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          Country
+          <Select
+            aria-label="Filter by country"
+            value={country}
+            onChange={(event) => onCountryChange(event.target.value)}
+          >
+            <option value="">All</option>
+            {countryOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </Select>
+        </label>
+      ) : null}
 
       <label className="flex items-center gap-2 text-sm text-muted-foreground">
         Device
