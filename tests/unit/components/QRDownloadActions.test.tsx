@@ -33,7 +33,13 @@ beforeEach(() => {
 describe("QRDownloadActions", () => {
   it("disables both download buttons when content is invalid/empty", () => {
     render(
-      <QRDownloadActions qrType="url" content={{}} design={DEFAULT_DESIGN_CONFIG} name="My QR" />,
+      <QRDownloadActions
+        qrType="url"
+        mode="static"
+        content={{}}
+        design={DEFAULT_DESIGN_CONFIG}
+        name="My QR"
+      />,
     );
 
     expect(screen.getByRole("button", { name: "Download PNG" })).toBeDisabled();
@@ -44,6 +50,7 @@ describe("QRDownloadActions", () => {
     render(
       <QRDownloadActions
         qrType="url"
+        mode="static"
         content={{ url: "example.com" }}
         design={DEFAULT_DESIGN_CONFIG}
         name="My QR"
@@ -62,6 +69,7 @@ describe("QRDownloadActions", () => {
     render(
       <QRDownloadActions
         qrType="url"
+        mode="static"
         content={{ url: "example.com" }}
         design={DEFAULT_DESIGN_CONFIG}
         name="My Restaurant Menu"
@@ -91,6 +99,7 @@ describe("QRDownloadActions", () => {
     render(
       <QRDownloadActions
         qrType="url"
+        mode="static"
         content={{ url: "example.com" }}
         design={DEFAULT_DESIGN_CONFIG}
         name="My Restaurant Menu"
@@ -115,6 +124,7 @@ describe("QRDownloadActions", () => {
     render(
       <QRDownloadActions
         qrType="url"
+        mode="static"
         content={{ url: "example.com" }}
         design={DEFAULT_DESIGN_CONFIG}
         name="My QR"
@@ -132,6 +142,7 @@ describe("QRDownloadActions", () => {
     render(
       <QRDownloadActions
         qrType="url"
+        mode="static"
         content={{ url: "example.com" }}
         design={DEFAULT_DESIGN_CONFIG}
         name="My QR"

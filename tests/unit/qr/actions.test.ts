@@ -114,6 +114,32 @@ describe("saveQrCode", () => {
     expect(typeof insertCall.slug).toBe("string");
     expect(insertCall.slug.length).toBeGreaterThan(0);
   });
+
+  it("stores the built payload as destination_url for a dynamic QR", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [{ data: { id: "new-id" }, error: null }],
+    });
+    const { saveQrCode } = await loadActions(client);
+
+    await saveQrCode({ ...VALID_INPUT, mode: "dynamic" });
+
+    const insertCall = client.from.mock.results[0].value.insert.mock.calls[0][0];
+    expect(insertCall.destination_url).toBe("https://example.com");
+  });
+
+  it("leaves destination_url null for a static QR", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [{ data: { id: "new-id" }, error: null }],
+    });
+    const { saveQrCode } = await loadActions(client);
+
+    await saveQrCode(VALID_INPUT);
+
+    const insertCall = client.from.mock.results[0].value.insert.mock.calls[0][0];
+    expect(insertCall.destination_url).toBeNull();
+  });
 });
 
 describe("updateQrCode", () => {
@@ -144,6 +170,27 @@ describe("updateQrCode", () => {
 
     expect(result.data).toEqual({ id: "qr-1" });
   });
+
+  it("re-derives destination_url from the new content, keeping the existing slug", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        { data: { slug: "existing1" }, error: null }, // existence check
+        { data: { id: "qr-1" }, error: null }, // the update itself
+      ],
+    });
+    const { updateQrCode } = await loadActions(client);
+
+    await updateQrCode("qr-1", {
+      ...VALID_INPUT,
+      mode: "dynamic",
+      content: { url: "https://changed.example.com" },
+    });
+
+    const updateCall = client.from.mock.results[1].value.update.mock.calls[0][0];
+    expect(updateCall.destination_url).toBe("https://changed.example.com");
+    expect(updateCall.slug).toBe("existing1");
+  });
 });
 
 describe("duplicateQrCode", () => {
@@ -170,6 +217,7 @@ describe("duplicateQrCode", () => {
             qr_type: "url",
             payload_data: { url: "https://example.com" },
             design_config: DEFAULT_DESIGN_CONFIG,
+            destination_url: null,
           },
           error: null,
         },
@@ -189,6 +237,34 @@ describe("duplicateQrCode", () => {
         status: "active",
       }),
     );
+  });
+
+  it("copies destination_url from the source for a dynamic QR, with a fresh slug", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        {
+          data: {
+            name: "Original",
+            mode: "dynamic",
+            qr_type: "url",
+            payload_data: { url: "https://example.com" },
+            design_config: DEFAULT_DESIGN_CONFIG,
+            destination_url: "https://example.com",
+          },
+          error: null,
+        },
+        { data: { id: "copy-id" }, error: null },
+      ],
+    });
+    const { duplicateQrCode } = await loadActions(client);
+
+    await duplicateQrCode("source-id");
+
+    const insertCall = client.from.mock.results[1].value.insert.mock.calls[0][0];
+    expect(insertCall.destination_url).toBe("https://example.com");
+    expect(typeof insertCall.slug).toBe("string");
+    expect(insertCall.slug.length).toBeGreaterThan(0);
   });
 });
 

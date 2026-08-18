@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { duplicateQrCode, deleteQrCode, setQrCodeStatus } from "@/lib/qr/actions";
-import { buildQrPayload, slugifyForFilename } from "@/lib/qr/render";
+import { resolveEncodedPayload, slugifyForFilename } from "@/lib/qr/render";
 import { renderStyledQrPngDataUrl } from "@/lib/qr/styled-svg";
 import type { QrCodeRecord } from "@/lib/qr/records";
 
@@ -25,12 +25,14 @@ function triggerDownload(href: string, filename: string) {
   document.body.removeChild(link);
 }
 
-type Busy = "download" | "duplicate" | "archive" | "delete" | null;
+type Busy = "download" | "duplicate" | "archive" | "pause" | "delete" | null;
 
 /**
  * Quick per-row actions for the dashboard QR list (Module 3.5): Download,
- * Duplicate, Archive/Unarchive, Delete (with confirmation). Regenerates
- * the download from the saved `payload_data`/`design_config` — never a
+ * Duplicate, Archive/Unarchive, Delete (with confirmation); Pause/Resume for
+ * dynamic codes (Module 3.6). Regenerates the download from the saved
+ * `payload_data`/`design_config` (mode-aware — a dynamic QR always
+ * regenerates its `/r/[slug]` link, never the raw destination) — never a
  * stored image — the same rule the generator itself follows. `router
  * .refresh()` after a mutation re-fetches the Server Component list rather
  * than hand-patching local state, keeping this the single source of truth.
@@ -45,7 +47,12 @@ export function QRCodeRowActions({ qrCode, showDownload = true }: QRCodeRowActio
     setBusy("download");
     setError(null);
     try {
-      const payload = buildQrPayload(qrCode.qrType, qrCode.payloadData);
+      const payload = resolveEncodedPayload(
+        qrCode.mode,
+        qrCode.qrType,
+        qrCode.payloadData,
+        qrCode.slug,
+      );
       if (!payload) {
         setError("Can't regenerate this QR code's content.");
         return;
@@ -82,6 +89,19 @@ export function QRCodeRowActions({ qrCode, showDownload = true }: QRCodeRowActio
     router.refresh();
   };
 
+  const handlePauseToggle = async () => {
+    setBusy("pause");
+    setError(null);
+    const nextStatus = qrCode.status === "paused" ? "active" : "paused";
+    const result = await setQrCodeStatus(qrCode.id, nextStatus);
+    setBusy(null);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    router.refresh();
+  };
+
   const openDeleteDialog = () => dialogRef.current?.showModal();
   const closeDeleteDialog = () => dialogRef.current?.close();
 
@@ -108,6 +128,17 @@ export function QRCodeRowActions({ qrCode, showDownload = true }: QRCodeRowActio
       <Button variant="ghost" size="sm" onClick={handleDuplicate} disabled={busy !== null}>
         {busy === "duplicate" ? "Duplicating..." : "Duplicate"}
       </Button>
+      {qrCode.mode === "dynamic" && qrCode.status !== "archived" ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handlePauseToggle}
+          disabled={busy !== null}
+          aria-label={`${qrCode.status === "paused" ? "Reactivate" : "Pause"} ${qrCode.name}`}
+        >
+          {busy === "pause" ? "Working..." : qrCode.status === "paused" ? "Reactivate" : "Pause"}
+        </Button>
+      ) : null}
       <Button variant="ghost" size="sm" onClick={handleArchiveToggle} disabled={busy !== null}>
         {busy === "archive" ? "Working..." : qrCode.status === "archived" ? "Unarchive" : "Archive"}
       </Button>

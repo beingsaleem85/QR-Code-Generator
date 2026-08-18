@@ -3,6 +3,7 @@ import {
   buildQrPayload,
   renderQrPngDataUrl,
   renderQrSvg,
+  resolveEncodedPayload,
   slugifyForFilename,
 } from "@/lib/qr/render";
 import { DEFAULT_DESIGN_CONFIG } from "@/types/qr-design";
@@ -27,6 +28,30 @@ describe("buildQrPayload", () => {
       encryption: "nopass",
     });
     expect(payload).toContain("Café Wi-Fi 日本語");
+  });
+});
+
+describe("resolveEncodedPayload", () => {
+  it("encodes the raw content payload for a static QR", () => {
+    expect(resolveEncodedPayload("static", "url", { url: "example.com" })).toBe(
+      "https://example.com",
+    );
+  });
+
+  it("encodes the app's own /r/[slug] redirect URL for a dynamic QR with a slug", () => {
+    const payload = resolveEncodedPayload("dynamic", "url", { url: "example.com" }, "abc12345");
+    expect(payload).toMatch(/\/r\/abc12345$/);
+    expect(payload).not.toContain("example.com");
+  });
+
+  it("returns null for a dynamic QR with no slug yet (not saved once)", () => {
+    expect(resolveEncodedPayload("dynamic", "url", { url: "example.com" }, null)).toBeNull();
+    expect(resolveEncodedPayload("dynamic", "url", { url: "example.com" })).toBeNull();
+  });
+
+  it("ignores content entirely once a dynamic QR has a slug", () => {
+    const withInvalidContent = resolveEncodedPayload("dynamic", "url", {}, "abc12345");
+    expect(withInvalidContent).toMatch(/\/r\/abc12345$/);
   });
 });
 

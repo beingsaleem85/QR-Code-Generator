@@ -41,6 +41,10 @@ interface QRGeneratorShellProps {
   /** edit-mode only: the saved row this shell is editing — determines
    * whether Save calls `saveQrCode` (create) or `updateQrCode` (this id). */
   qrCodeId?: string;
+  /** edit-mode only: the record's current slug, if it's a dynamic QR that's
+   * already been saved at least once — Module 3.6. Never generated
+   * client-side; a brand-new dynamic QR has none until the first save. */
+  initialSlug?: string | null;
 }
 
 /**
@@ -58,6 +62,7 @@ export function QRGeneratorShell({
   initialContent = {},
   initialDesign = DEFAULT_DESIGN_CONFIG,
   qrCodeId,
+  initialSlug = null,
 }: QRGeneratorShellProps) {
   const router = useRouter();
   const [mode, setMode] = useState<QRMode>(initialMode);
@@ -199,8 +204,21 @@ export function QRGeneratorShell({
         </div>
 
         <div className="flex flex-col gap-4 lg:sticky lg:top-20 lg:self-start">
-          <QRPreviewPanel qrType={qrType} mode={mode} content={content} design={design} />
-          <QRDownloadActions qrType={qrType} content={content} design={design} name={name} />
+          <QRPreviewPanel
+            qrType={qrType}
+            mode={mode}
+            content={content}
+            design={design}
+            slug={initialSlug}
+          />
+          <QRDownloadActions
+            qrType={qrType}
+            mode={mode}
+            content={content}
+            design={design}
+            name={name}
+            slug={initialSlug}
+          />
         </div>
       </div>
     </div>

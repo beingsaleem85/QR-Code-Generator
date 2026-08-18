@@ -86,4 +86,35 @@ describe("QRPreviewPanel", () => {
 
     expect(await screen.findByText("Scan to test.")).toBeInTheDocument();
   });
+
+  it("shows a distinct pending-save message for a dynamic QR with valid content but no slug yet", () => {
+    render(
+      <QRPreviewPanel
+        qrType="url"
+        mode="dynamic"
+        content={{ url: "example.com" }}
+        design={DEFAULT_DESIGN_CONFIG}
+      />,
+    );
+
+    expect(
+      screen.getByText("Save to generate your scannable dynamic QR code."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "QR code preview" })).not.toBeInTheDocument();
+  });
+
+  it("renders the real /r/[slug] redirect QR for a dynamic QR that already has a slug", async () => {
+    render(
+      <QRPreviewPanel
+        qrType="url"
+        mode="dynamic"
+        content={{ url: "example.com" }}
+        design={DEFAULT_DESIGN_CONFIG}
+        slug="abc12345"
+      />,
+    );
+
+    const preview = await screen.findByRole("img", { name: "QR code preview" });
+    expect(preview.querySelector("svg")).toBeInTheDocument();
+  });
 });

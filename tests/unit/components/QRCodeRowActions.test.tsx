@@ -144,4 +144,51 @@ describe("QRCodeRowActions", () => {
     render(<QRCodeRowActions qrCode={qrCode} showDownload={false} />);
     expect(screen.queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
   });
+
+  it("has no Pause control for a static QR", () => {
+    render(<QRCodeRowActions qrCode={qrCode} />);
+    expect(screen.queryByRole("button", { name: /pause/i })).not.toBeInTheDocument();
+  });
+
+  const dynamicQrCode: QrCodeRecord = {
+    ...qrCode,
+    mode: "dynamic",
+    slug: "abc12345",
+    destinationUrl: "https://example.com",
+  };
+
+  it("pauses an active dynamic QR and shows Reactivate for an already-paused one", async () => {
+    setQrCodeStatusMock.mockResolvedValue({ data: { status: "paused" } });
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={dynamicQrCode} />);
+
+    await user.click(screen.getByRole("button", { name: "Pause My Restaurant Menu" }));
+
+    expect(setQrCodeStatusMock).toHaveBeenCalledWith("qr-1", "paused");
+    expect(refreshMock).toHaveBeenCalled();
+
+    cleanup();
+    render(<QRCodeRowActions qrCode={{ ...dynamicQrCode, status: "paused" }} />);
+    expect(
+      screen.getByRole("button", { name: "Reactivate My Restaurant Menu" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides Pause once a dynamic QR is archived", () => {
+    render(<QRCodeRowActions qrCode={{ ...dynamicQrCode, status: "archived" }} />);
+    expect(screen.queryByRole("button", { name: /pause|reactivate/i })).not.toBeInTheDocument();
+  });
+
+  it("downloads a dynamic QR by regenerating its /r/[slug] redirect link, not the raw destination", async () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.example";
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={dynamicQrCode} />);
+
+    await user.click(screen.getByRole("button", { name: "Download" }));
+    expect(await screen.findByRole("button", { name: "Download" })).toBeEnabled();
+
+    expect(clickSpy).toHaveBeenCalledOnce();
+    clickSpy.mockRestore();
+  });
 });

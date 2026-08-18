@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { QrPlaceholderGraphic } from "@/components/ui/QrPlaceholderGraphic";
-import { buildQrPayload } from "@/lib/qr/render";
+import { buildQrPayload, resolveEncodedPayload } from "@/lib/qr/render";
 import { renderStyledQrSvg } from "@/lib/qr/styled-svg";
 import type { DesignConfig } from "@/types/qr-design";
 import type { QRMode, QRType } from "@/types/qr";
@@ -13,6 +13,9 @@ interface QRPreviewPanelProps {
   mode: QRMode;
   content: Record<string, unknown>;
   design: DesignConfig;
+  /** The saved record's slug (edit mode only) — a dynamic QR has no
+   * scannable image until it's been saved once and issued one. */
+  slug?: string | null;
 }
 
 /** Debounces re-render on rapid input (typing, slider drag) — the Preview
@@ -27,8 +30,11 @@ interface RenderedState {
 }
 
 /** Real, fully-styled QR rendering (Module 3.3) — pattern/eyes/gradient/logo/frame, not just solid colors. */
-export function QRPreviewPanel({ qrType, content, design }: QRPreviewPanelProps) {
-  const payload = buildQrPayload(qrType, content);
+export function QRPreviewPanel({ qrType, mode, content, design, slug }: QRPreviewPanelProps) {
+  const payload = resolveEncodedPayload(mode, qrType, content, slug);
+  // Content is valid (so Save will succeed) but a dynamic QR has no slug
+  // yet — distinct from "nothing entered" so the empty state explains why.
+  const pendingFirstSave = mode === "dynamic" && !slug && !!buildQrPayload(qrType, content);
   // Tracks which payload the rendered markup belongs to, so a stale SVG
   // never shows for the wrong content — checked at render time rather
   // than cleared with a synchronous setState inside the effect (the React
@@ -69,7 +75,9 @@ export function QRPreviewPanel({ qrType, content, design }: QRPreviewPanelProps)
 
       {!payload ? (
         <p className="text-center text-xs text-muted-foreground">
-          Enter content to preview your QR code.
+          {pendingFirstSave
+            ? "Save to generate your scannable dynamic QR code."
+            : "Enter content to preview your QR code."}
         </p>
       ) : current && current.warnings.length > 0 ? (
         <ul className="flex flex-col gap-1 text-center text-xs text-warning">

@@ -8,7 +8,8 @@ import { buttonVariants } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { QrPlaceholderGraphic } from "@/components/ui/QrPlaceholderGraphic";
 import { getQrTypeDefinition } from "@/lib/qr/registry";
-import { buildQrPayload } from "@/lib/qr/render";
+import { resolveEncodedPayload } from "@/lib/qr/render";
+import { buildRedirectUrl } from "@/lib/qr/redirect-url";
 import { deriveDestinationSummary } from "@/lib/qr/records";
 import { getQrCodeById } from "@/lib/qr/queries";
 import { renderStyledQrSvg } from "@/lib/qr/styled-svg";
@@ -25,8 +26,15 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
   const destinationSummary = deriveDestinationSummary(qrCode.qrType, qrCode.payloadData);
 
   // Server-rendered — no client JS needed just to see the QR. Real
-  // regeneration from saved config (Module 3.5), never a stored image.
-  const payload = buildQrPayload(qrCode.qrType, qrCode.payloadData);
+  // regeneration from saved config (Module 3.5); dynamic codes always
+  // encode this app's own /r/[slug] link, never the raw destination
+  // (Module 3.6) — never a stored image either way.
+  const payload = resolveEncodedPayload(
+    qrCode.mode,
+    qrCode.qrType,
+    qrCode.payloadData,
+    qrCode.slug,
+  );
   const preview = payload ? await renderStyledQrSvg(payload, qrCode.designConfig) : null;
 
   return (
@@ -59,9 +67,11 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
           </div>
           <QRDownloadActions
             qrType={qrCode.qrType}
+            mode={qrCode.mode}
             content={qrCode.payloadData}
             design={qrCode.designConfig}
             name={qrCode.name}
+            slug={qrCode.slug}
           />
         </Card>
 
@@ -77,10 +87,23 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
 
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase">
-                Destination / content
+                {qrCode.mode === "dynamic" ? "Current destination" : "Destination / content"}
               </p>
               <p className="text-sm break-all text-foreground">{destinationSummary}</p>
             </div>
+
+            {qrCode.mode === "dynamic" && qrCode.slug ? (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase">
+                  Printed QR links to
+                </p>
+                <p className="text-sm break-all text-foreground">{buildRedirectUrl(qrCode.slug)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  This link never changes — edit the destination above to redirect it elsewhere
+                  without reprinting the code.
+                </p>
+              </div>
+            ) : null}
 
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>

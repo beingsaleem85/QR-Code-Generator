@@ -717,3 +717,40 @@ Known issues:
 Next:
 
 - Module 3.6 — Dynamic QR Codes
+
+## Module 3.6 — Dynamic QR Codes
+
+Status: COMPLETE
+
+Completed:
+
+- **Privileged redirect path, no service-role key needed**: new migration `20260818120000_add_redirect_rpc_functions.sql` adds two narrow `SECURITY DEFINER` Postgres functions — `resolve_qr_redirect(p_slug)` (returns only `destination_url`/`status`, never an internal id) and `record_qr_scan(p_slug, ...)` (atomically inserts a `qr_scan_events` row and increments `scan_count_cached`, keyed by slug so a caller can never target an arbitrary internal row id directly). Both are exactly the "privileged server-side path" Module 1.5's own RLS comment anticipated for `qr_scan_events`, and avoid ever needing to fill in `SUPABASE_SERVICE_ROLE_KEY` — that env var stays blank.
+- `src/server/services/redirect-resolution.ts` implements the Module 1.2 stub for real, calling `resolve_qr_redirect` and defensively re-validating the stored destination is `http(s)` only (`src/lib/qr/redirect-url.ts`'s `isSafeRedirectTarget`) even though the `url` type's own Zod schema already enforces this at input time — open-redirect defense in depth, not reliance on a single layer.
+- `src/app/r/[slug]/route.ts`: real `GET` handler. `export const dynamic = "force-dynamic"` so a destination edit is visible on the very next scan, no caching. 404 for an unknown/invalid slug, 410 for a paused/archived one, 307 redirect for `ok`. Scan recording is scheduled via `after()` (`next/server`) so it never delays the redirect response to the visitor.
+- **The core architectural fix**: a dynamic QR's printed image now encodes this app's own `/r/[slug]` URL, never the raw destination — previously (through Module 3.5) dynamic mode was accepted end-to-end but nothing actually differentiated its *encoded payload* from a static QR's, so a "dynamic" QR would have baked the raw destination directly into the image, defeating the entire point. New `resolveEncodedPayload(mode, qrType, content, slug)` in `src/lib/qr/render.ts` centralizes the mode-aware choice and is now the single call site used by `QRPreviewPanel`, `QRDownloadActions`, `QRCodeRowActions`, and the detail page's server-rendered preview (replacing their previous direct `buildQrPayload` calls).
+- `destination_url` (schema column already existed since Module 1.4, unused until now) is populated by `saveQrCode`/`updateQrCode`/`duplicateQrCode` in `src/lib/qr/actions.ts` — denormalized from the already-validated content payload so the redirect route (no registry/payload-builder access inside a SQL function) can resolve it with a single flat column read. Editing a dynamic QR's content (e.g. changing the URL) re-derives `destination_url` while preserving the existing slug — "change destination without reprinting the code" falls straight out of the existing edit flow, no separate UI needed.
+- **Pending-first-save UX**: a brand-new dynamic QR has no slug (and so no real scannable image) until the first save — `QRPreviewPanel`/`QRDownloadActions` now show an explicit "Save to generate your scannable dynamic QR code" state instead of silently rendering nothing or (worse) the raw content.
+- Pause/Reactivate added to `QRCodeRowActions` for dynamic QRs (`active` ⟷ `paused`, hidden once archived) — reuses the existing generic `setQrCodeStatus` action from Module 3.5; the status badge already supported `paused` styling since the UI phase but had no control wired to it until now.
+- QR detail page: a new "Printed QR links to" field shows the stable `/r/[slug]` link alongside the existing "Current destination" summary, making the indirection visible rather than implicit.
+
+Verification:
+
+- New tests (35): `render.test.ts` (+4, `resolveEncodedPayload`), `redirect-url.test.ts` (7), `redirect-resolution.test.ts` (6), `scan-tracking.test.ts` (4), `r-slug-route.test.ts` (5, the route handler itself — 404/410/307/scan-scheduling), `actions.test.ts` (+4, `destination_url` persistence on save/update/duplicate), `QRPreviewPanel.test.tsx` (+2), `QRCodeRowActions.test.tsx` (+4, pause/reactivate + dynamic download).
+- `npm run typecheck` / `lint` (0 errors, same 8 pre-existing warnings) / `format:check` — pass
+- `rm -rf .next && npm run build` — pass, all 25 routes build (route count unchanged — `/r/[slug]` already existed as a stub since Module 1.2); confirmed dynamic (ƒ) in the build output, not statically optimized.
+- `npm run test` — **250/250 passing**
+- **Live verification against the real Supabase project** (migration pushed via `supabase db push --linked`; confirmed both functions exist with `prosecdef = true`): temporarily enabled `mailer_autoconfirm` (avoids the project's SMTP rate limit hit in Module 3.5) to provision one throwaway confirmed account, seeded three real `qr_codes` rows directly (active, paused, and one with a `javascript:` destination inserted to bypass app-level validation on purpose), ran `npm run dev` and drove the real routes through the Browser pane:
+  - active slug → real 307 redirect to the stored destination; `scan_count_cached` and a `qr_scan_events` row both confirmed incremented/inserted afterward.
+  - paused slug → 410 `{"error":"inactive"}`.
+  - unknown slug → 404 `{"error":"not_found"}`.
+  - `javascript:` destination → 404 `{"error":"not_found"}` (confirms the redirect-time open-redirect check actually fires, not just the input-time Zod schema).
+  - updated the active row's `destination_url` directly via SQL, re-requested the same slug — landed on the new destination immediately, proving no caching/staleness.
+  - Cleanup: deleted all 3 test `qr_codes` rows and the throwaway auth account, restored `mailer_autoconfirm` to `false`; confirmed `count(*) = 0` on both `qr_codes` and `auth.users` afterward.
+
+Known issues:
+
+- None blocking. The nine `dynamicSupport: true` QR types that need a hosted landing page instead of a plain redirect (`pdf`, `app`, `images`, `video`, `social`, `multi_link`, `menu`, `feedback`, `audio` — already flagged `needsLandingPage: true` in the registry since Module 1.3) still have no real content form at all (`notYetImplementedQrSchema`), so they were out of scope here by construction, not a regression — Module 3.9 owns `/p/[slug]` and `landing_page_config`. Module 3.7 (Scan Analytics) still owns real device/OS/browser/geo parsing — `record_qr_scan`'s metadata parameters exist but only `referrer` is populated for now.
+
+Next:
+
+- Module 3.7 — Scan Analytics

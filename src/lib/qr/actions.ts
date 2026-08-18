@@ -34,6 +34,21 @@ function validateSaveInput(input: SaveQrCodeInput): { payload: string } | { erro
   return { payload };
 }
 
+/**
+ * A dynamic QR's `destination_url` is denormalized from its own validated
+ * payload so the redirect route (a hot, latency-sensitive path) can resolve
+ * it with a single flat column read — no registry/payload-builder logic
+ * available there at all, since it runs through a SECURITY DEFINER SQL
+ * function, not app code. Only ever non-null for dynamic types whose
+ * payload already *is* a destination (currently `url`, `whatsapp` — the
+ * only dynamic types with a real content form); types that need a hosted
+ * landing page instead (`needsLandingPage: true`) don't have one yet, so
+ * `buildQrPayload` already returns `null` for them and this stays null too.
+ */
+function resolveDestinationUrl(input: SaveQrCodeInput, payload: string): string | null {
+  return input.mode === "dynamic" ? payload : null;
+}
+
 export async function saveQrCode(input: SaveQrCodeInput): Promise<ActionResult<{ id: string }>> {
   const validated = validateSaveInput(input);
   if ("error" in validated) return { error: validated.error };
@@ -41,6 +56,8 @@ export async function saveQrCode(input: SaveQrCodeInput): Promise<ActionResult<{
   const supabase = await createClient();
   const user = await requireUser(supabase);
   if (!user) return { error: AUTH_REQUIRED };
+
+  const destinationUrl = resolveDestinationUrl(input, validated.payload);
 
   let lastError: string | null = null;
   for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
@@ -54,6 +71,7 @@ export async function saveQrCode(input: SaveQrCodeInput): Promise<ActionResult<{
         qr_type: input.qrType,
         payload_data: input.content,
         design_config: input.design,
+        destination_url: destinationUrl,
         slug,
       })
       .select("id")
@@ -89,6 +107,8 @@ export async function updateQrCode(
     return { error: "Couldn't find that QR code — it may have been deleted." };
   }
 
+  const destinationUrl = resolveDestinationUrl(input, validated.payload);
+
   let lastError: string | null = null;
   for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
     const slug = input.mode === "dynamic" ? (existing.slug ?? generateRandomSlug()) : existing.slug;
@@ -101,6 +121,7 @@ export async function updateQrCode(
         qr_type: input.qrType,
         payload_data: input.content,
         design_config: input.design,
+        destination_url: destinationUrl,
         slug,
       })
       .eq("id", id)
@@ -130,7 +151,7 @@ export async function duplicateQrCode(id: string): Promise<ActionResult<{ id: st
 
   const { data: source, error: fetchError } = await supabase
     .from("qr_codes")
-    .select("name, mode, qr_type, payload_data, design_config")
+    .select("name, mode, qr_type, payload_data, design_config, destination_url")
     .eq("id", id)
     .maybeSingle();
 
@@ -150,6 +171,7 @@ export async function duplicateQrCode(id: string): Promise<ActionResult<{ id: st
         qr_type: source.qr_type,
         payload_data: source.payload_data,
         design_config: source.design_config,
+        destination_url: source.destination_url,
         slug,
         status: "active",
       })

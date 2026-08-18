@@ -1,6 +1,7 @@
 import QRCode from "qrcode";
 import { getQrTypeDefinition } from "@/lib/qr/registry";
-import type { QRType } from "@/types/qr";
+import { buildRedirectUrl } from "@/lib/qr/redirect-url";
+import type { QRMode, QRType } from "@/types/qr";
 import type { DesignConfig } from "@/types/qr-design";
 
 /**
@@ -18,6 +19,28 @@ export function buildQrPayload(qrType: QRType, content: Record<string, unknown>)
   if (!parsed.success) return null;
 
   return definition.payloadBuilder(parsed.data as Record<string, unknown>);
+}
+
+/**
+ * What actually gets encoded into the QR image, mode-aware (Module 3.6). A
+ * static QR always encodes its content directly. A dynamic QR always
+ * encodes this app's own `/r/[slug]` redirect URL instead — never the raw
+ * content — so the destination can change later without reprinting the
+ * code. `slug` is `null`/`undefined` only in the brief window between
+ * starting a new dynamic QR and its first save (no slug has been issued
+ * yet); callers treat that as "nothing to render yet", same as invalid
+ * content.
+ */
+export function resolveEncodedPayload(
+  mode: QRMode,
+  qrType: QRType,
+  content: Record<string, unknown>,
+  slug?: string | null,
+): string | null {
+  if (mode === "dynamic") {
+    return slug ? buildRedirectUrl(slug) : null;
+  }
+  return buildQrPayload(qrType, content);
 }
 
 /**

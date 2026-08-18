@@ -4,16 +4,19 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Select } from "@/components/ui/Select";
-import { buildQrPayload, slugifyForFilename } from "@/lib/qr/render";
+import { resolveEncodedPayload, slugifyForFilename } from "@/lib/qr/render";
 import { renderStyledQrPngDataUrl, renderStyledQrSvg } from "@/lib/qr/styled-svg";
 import type { DesignConfig } from "@/types/qr-design";
-import type { QRType } from "@/types/qr";
+import type { QRMode, QRType } from "@/types/qr";
 
 interface QRDownloadActionsProps {
   qrType: QRType;
+  mode: QRMode;
   content: Record<string, unknown>;
   design: DesignConfig;
   name: string;
+  /** The saved record's slug (edit mode only) — see QRPreviewPanel. */
+  slug?: string | null;
 }
 
 const PNG_SIZE_OPTIONS = [512, 1024, 2048] as const;
@@ -37,12 +40,20 @@ function triggerDownload(href: string, filename: string) {
  * only ever handles rendering/export, whether for a live draft or an
  * already-saved QR (the QR detail page reuses it directly).
  */
-export function QRDownloadActions({ qrType, content, design, name }: QRDownloadActionsProps) {
+export function QRDownloadActions({
+  qrType,
+  mode,
+  content,
+  design,
+  name,
+  slug,
+}: QRDownloadActionsProps) {
   const [downloading, setDownloading] = useState<"png" | "svg" | null>(null);
   const [pngSize, setPngSize] = useState<PngSize>(1024);
-  const payload = buildQrPayload(qrType, content);
+  const payload = resolveEncodedPayload(mode, qrType, content, slug);
   const filename = slugifyForFilename(name);
   const disabled = !payload || downloading !== null;
+  const pendingFirstSave = mode === "dynamic" && !slug;
 
   const handleDownloadPng = async () => {
     if (!payload) return;
@@ -91,7 +102,9 @@ export function QRDownloadActions({ qrType, content, design, name }: QRDownloadA
         {downloading === "svg" ? "Preparing SVG..." : "Download SVG"}
       </Button>
       <p className="text-center text-xs text-muted-foreground">
-        SVG is vector — always crisp at any size.
+        {pendingFirstSave
+          ? "Save this QR code first to download it."
+          : "SVG is vector — always crisp at any size."}
       </p>
     </div>
   );
