@@ -1,9 +1,19 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SignupForm } from "@/components/auth/SignupForm";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+}));
+
+// Never resolves — see LoginForm.test.tsx for why.
+const signUpMock = vi.fn(() => new Promise(() => {}));
+vi.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({ auth: { signUp: signUpMock } }),
+}));
 
 afterEach(() => cleanup());
 
@@ -30,7 +40,7 @@ describe("SignupForm", () => {
     expect(await screen.findByText(/passwords do not match/i)).toBeInTheDocument();
   });
 
-  it("accepts valid matching passwords and enters the submitting state", async () => {
+  it("accepts valid matching passwords, calls Supabase, and enters the submitting state", async () => {
     const user = userEvent.setup();
     render(<SignupForm />);
 
@@ -44,5 +54,43 @@ describe("SignupForm", () => {
     // doesn't depend on real wall-clock timing under parallel test load.
     expect(screen.queryByText(/passwords do not match/i)).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Creating account..." })).toBeDisabled();
+    expect(signUpMock).toHaveBeenCalledWith({
+      email: "person@example.com",
+      password: "correcthorse",
+      options: { emailRedirectTo: expect.stringContaining("/auth/callback?next=/dashboard") },
+    });
+  });
+
+  it("shows a check-your-email message when signup succeeds without an immediate session", async () => {
+    signUpMock.mockResolvedValueOnce({
+      data: { user: { id: "user-1" }, session: null },
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<SignupForm />);
+
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "correcthorse");
+    await user.type(screen.getByLabelText("Confirm password"), "correcthorse");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(await screen.findByText(/check your email/i)).toBeInTheDocument();
+  });
+
+  it("shows a real error alert when Supabase rejects the signup", async () => {
+    signUpMock.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: { message: "User already registered" },
+    });
+    const user = userEvent.setup();
+    render(<SignupForm />);
+
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "correcthorse");
+    await user.type(screen.getByLabelText("Confirm password"), "correcthorse");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(await screen.findByText("User already registered")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create account" })).toBeEnabled();
   });
 });

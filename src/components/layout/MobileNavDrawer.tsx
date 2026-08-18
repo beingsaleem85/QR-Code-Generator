@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { buttonVariants } from "@/components/ui/Button";
 
 interface MobileNavDrawerProps {
   links: readonly { label: string; href: string }[];
   cta?: { label: string; href: string };
+  /** Extra content rendered below the nav links, e.g. a dashboard log-out action. */
+  footer?: ReactNode;
 }
 
 /**
@@ -14,7 +17,7 @@ interface MobileNavDrawerProps {
  * focus trapping and Escape-to-close for free, so this component only
  * needs to manage open/close state and backdrop-click dismissal.
  */
-export function MobileNavDrawer({ links, cta }: MobileNavDrawerProps) {
+export function MobileNavDrawer({ links, cta, footer }: MobileNavDrawerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
 
@@ -105,6 +108,7 @@ export function MobileNavDrawer({ links, cta }: MobileNavDrawerProps) {
               {cta.label}
             </Link>
           ) : null}
+          {footer}
         </nav>
       </dialog>
     </>

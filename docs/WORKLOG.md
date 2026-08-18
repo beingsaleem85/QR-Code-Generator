@@ -573,3 +573,35 @@ Audited every screen built across Modules 2.1–2.9 against the master prompt's 
 ### PHASE GATE: PASSED
 
 Phase 2 (UI) is complete and verified. Proceeding to **Phase 3 — Features**, starting with Module 3.1 (Supabase Connection and Authentication).
+
+## Module 3.1 — Supabase Connection and Authentication
+
+Status: COMPLETE
+
+Blocked, then unblocked: per standing instruction, stopped and asked for the minimum live credentials (project URL + anon/publishable key) before writing any code. The user supplied both. Full reasoning and design decisions are in `docs/ARCHITECTURE.md`'s "Supabase Connection and Authentication (Module 3.1)" section — this entry is the implementation/verification log.
+
+Completed:
+
+- Installed `@supabase/supabase-js` + `@supabase/ssr`. Added real values to `.env.local`.
+- `src/lib/supabase/client.ts` (browser client), `server.ts` (server client, async `cookies()`), `dal.ts` (`getAuthenticatedUser()`, the mandatory secure re-check), `profile.ts` (`ensureProfile()` upsert helper).
+- `src/proxy.ts` — optimistic cookie-based redirect for `/dashboard/*` (unauthenticated) and `/login`/`/signup` (authenticated).
+- `(dashboard)/layout.tsx` now `async`, calls `getAuthenticatedUser()` before rendering — all 10 dashboard routes are now server-rendered dynamically (confirmed via build output) instead of static.
+- Rewired `LoginForm`, `SignupForm`, `ForgotPasswordForm`, `ResetPasswordForm` to call real `supabase.auth.*` methods in place of the Module 2.5 `setTimeout` stand-ins, preserving validation/loading-state UX exactly.
+- Replaced the static `auth/callback/page.tsx` with a `route.ts` Route Handler supporting both `token_hash`+`type` and `code` confirmation-link shapes.
+- Added `src/lib/supabase/actions.ts`'s `logout()` Server Action and a `LogoutButton`, wired into both `DashboardSidebar` and (via a new `MobileNavDrawer` `footer` prop) the mobile nav drawer — there was no logout control anywhere in the app before this module.
+
+Verification:
+
+- `npm run format:check` / `typecheck` / `lint` (0 errors, same 8 pre-existing informational warnings) — pass
+- `rm -rf .next && npm run build` — pass, all 25 routes build
+- `npm run test` — **103/103 passing** (11 new/rewritten: `LoginForm`, `SignupForm` rewritten for real Supabase calls + error paths; new `ForgotPasswordForm.test.tsx`, `ResetPasswordForm.test.tsx`)
+- **Live verification against the user's actual hosted project** (not just mocked tests) — see `docs/ARCHITECTURE.md` for the full breakdown. Summary: applied all 8 existing migrations to the previously-schema-less live project via `supabase link` + `supabase db push` (user supplied a personal access token + DB password specifically for this); added `http://localhost:3000/**` to the project's auth redirect allow list (was blocking `/auth/callback`); then verified signup, email-confirmation (simulated via direct SQL, since no inbox is reachable from this environment), login, wrong-password rejection, profile upsert against real RLS (via a script using the actual `@supabase/supabase-js` package, not curl), password-recovery request (correctly hit Supabase's own rate limit on a second attempt), protected-route redirect (`curl`), and — in the real Browser pane against the real dev server — login → authenticated dashboard load → session-persistence-across-reload → logout → session genuinely cleared. A throwaway test account was created and fully deleted afterward; confirmed zero rows left in `auth.users`/`profiles` post-cleanup.
+
+Known issues:
+
+- Account page (`/dashboard/account`) still shows `MOCK_PROFILE`, not the real signed-in user — this module's explicit scope is profile creation/upsert, not wiring every consumer of profile data, and no later master-prompt module is named for it either. Flagged as a real master-prompt gap in `docs/ARCHITECTURE.md`, not silently absorbed into this module's scope.
+- `uri_allow_list` on the live project currently only covers `localhost:3000` — will need the production URL added once one exists (already a known, tracked future blocker, not new).
+
+Next:
+
+- Module 3.2 — Static QR Generation

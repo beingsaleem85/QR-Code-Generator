@@ -607,3 +607,82 @@ The full findings, fixes, and reasoning live in `docs/WORKLOG.md`'s Module 2.10 
 - `RouteStub`, `not-found.tsx`, `error.tsx`, `loading.tsx` migrated off pre-Module-2.1 raw colors onto tokens. `global-error.tsx` is a deliberate exception — it replaces the root layout (and therefore bypasses `layout.tsx`'s `globals.css` import), so it intentionally stays free of any dependency on the app's CSS pipeline, matching Next.js's own minimal example for this exact file.
 - `QRCodeTable` (QR codes list) and `AssetTable` (Files) desktop wrappers gained `overflow-x-auto` as a horizontal-overflow guard near the `md:` breakpoint.
 - The jsdom `<dialog>` polyfill introduced ad hoc in Module 2.9 (`FilesView.test.tsx`) is now `tests/setup.ts`, loaded globally via `vitest.config.mts`'s `setupFiles` (a no-op outside jsdom), and extended to dispatch the native `close` event so components that listen for it (`MobileNavDrawer`) behave correctly under test. `MobileNavDrawer` — previously untested for exactly this reason — now has real component test coverage.
+
+# Phase 3 — Features
+
+Phase 2's UI phase gate passed (Module 2.10). Phase 3 replaces mock data and disabled/stand-in actions with real Supabase-backed behavior, module by module, per the master prompt's own Phase 3 module list. Nothing in Phase 1/2 is revisited except where a Phase 3 module explicitly requires it (e.g. wiring an existing form to a real backend call).
+
+## Supabase Connection and Authentication (Module 3.1)
+
+The first Phase 3 module — and the first point in this project where a live/hosted Supabase project is genuinely required, per the standing credential-request discipline established at the start of this build. Blocked until the user supplied the project URL and anon/publishable key; a database password and personal access token were requested and supplied separately, later, specifically to push schema migrations to the (brand-new, schema-less) live project — see "Applying the schema to the live project" below.
+
+### Browser/server clients and the protected-route strategy
+
+Follows Supabase's own documented `@supabase/ssr` Next.js App Router pattern exactly, not a custom session scheme:
+
+- `src/lib/supabase/client.ts` — `createBrowserClient()`, used from Client Components (the four auth forms).
+- `src/lib/supabase/server.ts` — `createServerClient()`, reading/writing the session via Next 16's async `cookies()`. `setAll`'s `try/catch` is deliberate: it's a no-op when called during a Server Component render (cookies are read-only there by design), which is fine because `proxy.ts` refreshes the session cookie on every request regardless — this is the same caveat Supabase's own docs call out.
+- `src/proxy.ts` (Next 16's renamed `middleware.ts`) — **optimistic** check only, exactly per Next.js's own authentication guide: reads the session from the cookie via `getUser()` (which revalidates the JWT against Supabase Auth, unlike the cheaper-but-unverified `getSession()`), redirects an unauthenticated request away from `/dashboard/*`, and redirects an authenticated request away from `/login`/`/signup`. Proxy runs on every request including prefetches, so per Next's guidance it deliberately never touches the database.
+- `src/lib/supabase/dal.ts` — `getAuthenticatedUser()`, the **mandatory, database-verified** re-check, `cache()`'d and called from `(dashboard)/layout.tsx`. This is Next.js's own recommended Data Access Layer pattern: the proxy check alone is explicitly documented as insufficient on its own, so every dashboard page load re-verifies server-side rather than trusting the cookie's mere presence.
+
+### Auth forms: real calls, same UX
+
+`LoginForm`/`SignupForm`/`ForgotPasswordForm`/`ResetPasswordForm` (Module 2.5) kept their existing Zod validation, loading-state, and layout exactly as built and tested — only the submit handler body changed, from a stand-in `setTimeout` to a real `supabase.auth.*` call:
+
+- **Login** — `signInWithPassword`, then `ensureProfile()` (idempotent safety net for any account created before this logic existed), then redirects to `?redirectTo=` if present and same-app (`startsWith("/dashboard")`, guarding against an open redirect via a manipulated query string) or `/dashboard` otherwise.
+- **Signup** — `signUp` with `emailRedirectTo` pointing at `/auth/callback?next=/dashboard`. If Supabase returns a session immediately (project has autoconfirm on), it upserts the profile and redirects like login; otherwise it shows a "check your email" `Alert` — this project's live config has `mailer_autoconfirm=false`, confirmed directly via the Management API, so the emailed-confirmation path is the one real signups take.
+- **Forgot password** — `resetPasswordForEmail` with `redirectTo` pointing at `/auth/callback?next=/reset-password`. Always shows the same generic "if an account exists..." success message on a non-error response, deliberately not confirming or denying whether the address has an account.
+- **Reset password** — `updateUser({ password })`, relying on the temporary recovery session `/auth/callback` established from the emailed link; a missing/expired session surfaces Supabase's own error message via the existing `Alert`, no special-casing needed.
+
+All four forms replaced their `formError` dead state (declared but never set, before this module) with a real error path wired to Supabase's actual error responses.
+
+### The callback route: one handler, two link shapes
+
+`src/app/(auth)/auth/callback/page.tsx` (a static placeholder since Module 2.5) is now `route.ts` — a Route Handler, not a page, since it only ever needs to redirect. It handles both shapes a Supabase email link can take depending on project/template configuration: `token_hash`+`type` (verified via `verifyOtp()`) or a PKCE `code` (via `exchangeCodeForSession()`), so it works regardless of how the project's email templates end up configured rather than assuming one. On success it calls `ensureProfile()` and redirects to the `next` query param (validated to be a same-app path, same open-redirect guard as the login form); on failure or missing params, it redirects to `/login?error=confirmation_failed`.
+
+### Profile creation/upsert
+
+`src/lib/supabase/profile.ts`'s `ensureProfile()` does `upsert({ id: user.id }, { onConflict: "id", ignoreDuplicates: true })` — only `id` is ever written, so it's safe to call idempotently from every entry point that can produce a session (login, signup, the callback route) rather than tracking "is this truly the user's first sign-in" separately. `display_name`/`avatar_url` stay null until a user sets them, which no module currently does — the Account page (Module 2.9) still reads `MOCK_PROFILE`, deliberately left unwired. See "Scope boundary: Account page" below.
+
+### Logout
+
+`src/lib/supabase/actions.ts`'s `logout()` is a Server Action (`supabase.auth.signOut()` then `redirect("/login")`), invoked via a plain `<form action={logout}>` — no client JS required, works via standard form submission. `LogoutButton` (`src/components/dashboard/LogoutButton.tsx`) is used from both `DashboardSidebar` (desktop) and a new `footer` slot on `MobileNavDrawer` (mobile) — `MobileNavDrawer` gained this optional prop rather than hardcoding a logout concept into what's otherwise a generic, marketing-header-reused component.
+
+### Applying the schema to the live project
+
+The user's Supabase project was brand new — none of the Module 1.4/1.5 migrations had been applied to it yet, only validated against local Docker Supabase. Rather than have the user paste raw SQL into the dashboard, they opted to share a personal access token and the project's database password so this could be done directly: `supabase link --project-ref emhsdqfqzdcuexvhweiz` then `supabase db push`, which applied all 8 existing migrations (extensions, 5 tables, RLS policies, storage buckets) cleanly. Both credentials were used only for these two CLI calls and for the read-only verification queries described below — neither is stored anywhere in the repo or `.env.local`.
+
+One additional live-project config change was made, not just schema: the project's default auth redirect allow list only permitted `site_url` (`http://localhost:3000`) itself, not subpaths — which would have silently broken the `/auth/callback` redirect Supabase generates for confirmation/recovery emails. Added `http://localhost:3000/**` to the project's `uri_allow_list` via the Management API. This is a standing, permanent project setting (not a one-off test tweak) and will need a production URL added alongside it once one exists (a known, already-tracked future blocker, not new).
+
+### Live verification (not just mocked component tests)
+
+Component tests (see below) mock `@/lib/supabase/client`, which proves the forms call Supabase correctly but not that Supabase itself is configured and reachable, or that RLS actually allows what the code assumes. Both were verified directly against the live project, using a throwaway test account deleted immediately afterward (cascade-deleted its `profiles` row too — confirmed via a post-cleanup row count):
+
+- **Signup** — real `POST /auth/v1/signup` against the live project: 200, user created unconfirmed (matches `mailer_autoconfirm=false`).
+- **Email confirmation simulated** — since clicking a real emailed link isn't reachable from this environment, the test user's `email_confirmed_at` was set directly via SQL (`supabase db query --linked`) to reach the same state a real click would produce, rather than skipping the rest of the flow.
+- **Login** — real `POST /auth/v1/token?grant_type=password`: returns a valid session; a deliberately wrong password correctly returns `invalid_credentials` (the exact message the component tests assert on).
+- **Profile RLS** — a standalone script using the real `@supabase/supabase-js` package (not curl) signed in as the test user and ran the exact upsert `ensureProfile()` runs; it succeeded, and a follow-up `select` confirmed RLS correctly scoped visibility to only the caller's own row.
+- **Password recovery** — real `POST /auth/v1/recover`: accepted (a second attempt minutes later correctly hit Supabase's own email rate limit, which is expected platform behavior, not a bug — and is exactly the kind of error our generic `Alert` error path already handles).
+- **Protected-route redirect** — `curl` against the dev server: unauthenticated `/dashboard` → `307` to `/login?redirectTo=%2Fdashboard`; `/login`/`/signup` → `200` (no bounce) while unauthenticated.
+- **Login → authenticated dashboard load → session persistence → logout**, in the real Browser pane against the real dev server and the real live project (not mocked): filled and submitted the login form, landed on `/dashboard` with real nav and mock QR data rendering (no console errors); a full page reload while on `/dashboard` stayed authenticated (session persistence); clicking "Log out" redirected to `/login`, and navigating back to `/dashboard` in the same browser afterward bounced to `/login` again — confirming the session cookie was genuinely cleared, not just a client-side redirect.
+
+### Verification approach (automated)
+
+New/updated component tests: `LoginForm.test.tsx`, `SignupForm.test.tsx` (rewritten for the real calls — both now mock `next/navigation`'s `useRouter` and `@/lib/supabase/client`, asserting the exact arguments passed to Supabase and both the success and error-`Alert` paths), plus new `ForgotPasswordForm.test.tsx` and `ResetPasswordForm.test.tsx` following the same pattern. Per the Module 2.5 lesson, mocked Supabase calls that shouldn't resolve during a "still submitting" assertion return a promise that never resolves, rather than depending on real timing. `npm run typecheck`/`lint`/`format:check`/`build` all pass; suite is 103/103.
+
+### Scope boundary: Account page
+
+The master prompt's Module 3.1 objective list is specifically "profile creation/upsert" — not wiring every page that displays profile data. The Account page (`/dashboard/account`) still renders `MOCK_PROFILE` rather than the real signed-in user's email/profile row. This is a genuine gap in the master prompt: no later Phase 3 module is explicitly named for "Account features" the way Modules 3.2–3.17 cover QR generation, dynamic codes, analytics, files, search, etc. Left as-is rather than silently expanding this module's scope; worth the user's attention when convenient (e.g. alongside whichever module next touches dashboard-wide real data).
+
+### Acceptance status
+
+- [x] Browser Supabase client
+- [x] Server Supabase client
+- [x] Auth session handling (cookie-based via `@supabase/ssr`, refreshed every request by `proxy.ts`)
+- [x] Middleware/protected-route strategy (`proxy.ts` optimistic + DAL mandatory re-check)
+- [x] Signup (real, live-verified)
+- [x] Login (real, live-verified)
+- [x] Logout (real, live-verified)
+- [x] Password recovery (real, live-verified request flow)
+- [x] Profile creation/upsert (real, live-verified against RLS)
+- [x] Service-role credentials never requested or exposed client-side (not needed until Module 3.7)

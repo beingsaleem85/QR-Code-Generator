@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DASHBOARD_NAV_ITEMS } from "@/components/dashboard/nav-items";
+import { LogoutButton } from "@/components/dashboard/LogoutButton";
 
 /**
  * Picks the single most specific nav item matching the current path (e.g.
@@ -37,6 +38,9 @@ export function DashboardSidebar() {
           </Link>
         );
       })}
+      <div className="mt-2 border-t border-border pt-2">
+        <LogoutButton />
+      </div>
     </nav>
   );
 }
