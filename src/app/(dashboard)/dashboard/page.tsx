@@ -3,15 +3,15 @@ import { AnalyticsSummaryCards } from "@/components/analytics/AnalyticsSummaryCa
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { QRCodeCard } from "@/components/dashboard/QRCodeCard";
 import { buttonVariants } from "@/components/ui/Button";
-import { MOCK_QR_CODES } from "@/lib/qr/mock-data";
+import { listQrCodes } from "@/lib/qr/queries";
 
-export default function DashboardOverviewPage() {
-  const totalQrCodes = MOCK_QR_CODES.length;
-  const dynamicQrCodes = MOCK_QR_CODES.filter((qr) => qr.mode === "dynamic").length;
-  const totalScans = MOCK_QR_CODES.reduce((sum, qr) => sum + qr.scanCount, 0);
-  const recent = [...MOCK_QR_CODES]
-    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-    .slice(0, 3);
+export default async function DashboardOverviewPage() {
+  const qrCodes = await listQrCodes();
+
+  const totalQrCodes = qrCodes.length;
+  const dynamicQrCodes = qrCodes.filter((qr) => qr.mode === "dynamic").length;
+  const totalScans = qrCodes.reduce((sum, qr) => sum + qr.scanCount, 0);
+  const recent = [...qrCodes].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, 3);
 
   return (
     <div className="flex flex-col gap-6">
@@ -41,11 +41,17 @@ export default function DashboardOverviewPage() {
               View all
             </Link>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {recent.map((qrCode) => (
-              <QRCodeCard key={qrCode.id} qrCode={qrCode} />
-            ))}
-          </div>
+          {recent.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+              No QR codes yet — create your first one to see it here.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {recent.map((qrCode) => (
+                <QRCodeCard key={qrCode.id} qrCode={qrCode} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

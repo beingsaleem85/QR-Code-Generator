@@ -814,3 +814,80 @@ Module 3.2 already shipped a _working default_ download (fixed 512px PNG, minima
 - [x] Downloads work (verified via component tests exercising the real download trigger, not just "doesn't throw")
 - [x] Logo appears correctly, transparent background behaves as expected, QR remains readable after export — all explicitly verified, not assumed
 - JPEG and print PDF: skipped — the master prompt marks both as optional/conditional ("only if it offers a clear user benefit" / "only if reliably implemented"), and PNG+SVG already cover this app's real use cases
+
+## Saving and Managing QR Codes (Module 3.5)
+
+The first module that writes to `qr_codes`. Everything the generator/detail/edit UI has done since Phase 2 — design, styling, download — now has somewhere real to live, using the schema and RLS policies designed in Module 1.4/1.5 exactly as they were built, with no parallel persistence model.
+
+### Data layer: one mapping, one read path, one write path
+
+- `src/lib/qr/records.ts` — `QrCodeDbRow` (raw snake_case row) → `QrCodeRecord` (camelCase, app-layer; deliberately never carries `user_id` — ownership is an RLS/server concern, not something app code should be passing around) via `toQrCodeRecord()`. `deriveDestinationSummary()` builds a short, human-readable summary directly from `payload_data`'s own fields (not the fully-built encoded payload — a raw vCard or WIFI-string isn't fit for display), reusing the exact field names each type's Zod schema (Module 1.3) already defines. `toQrCodeSummary()` projects a `QrCodeRecord` down to the display-only `QRCodeSummary` shape used by list views.
+- `src/lib/qr/queries.ts` — `listQrCodes()`/`getQrCodeById()`, read-only, for Server Components. No explicit `.eq("user_id", ...)` filter is added anywhere — RLS's `qr_codes_select_own` policy already restricts every row to the caller, so a redundant client-side filter would just duplicate a guarantee the database already provides. `getQrCodeById()` returns `null` identically whether a row doesn't exist or exists but isn't the caller's — RLS makes the two indistinguishable at the query level, which is the point: a 404 shouldn't leak whether an id belongs to someone else.
+- `src/lib/qr/actions.ts` (`"use server"`) — `saveQrCode`, `updateQrCode`, `duplicateQrCode`, `setQrCodeStatus`, `deleteQrCode`. Every one gets the caller's identity from `supabase.auth.getUser()` server-side and never from client input — the `SaveQrCodeInput` type doesn't even have a `user_id` field, so there's no code path that could accidentally trust one. Content is re-validated server-side via the existing `buildQrPayload()` (Module 1.3's Zod schemas) before any write — the client already validates too, but a server action is a public endpoint regardless of which UI called it.
+- `src/lib/qr/action-types.ts` — `SaveQrCodeInput`, `ActionResult<T>`, and the `AUTH_REQUIRED` sentinel live here, split out of `actions.ts` itself. This isn't a style choice: a file with a top-level `"use server"` directive may **only** export async functions — Next's build fails opaquely ("module has no exports") the moment a plain constant is exported alongside them. Caught by running an actual production build, not by typecheck or lint, which is exactly why the build step is part of the module gate and not optional.
+
+### Never storing generated images — regenerating instead
+
+`design_config`/`payload_data` are the only things ever written for a QR's visual — never a rendered PNG/SVG. The QR detail page **server-renders** the real preview by calling `buildQrPayload()` + `renderStyledQrSvg()` (Module 3.3's styled renderer) directly during the page's own render, no client JS needed just to see it; downloads (`QRDownloadActions`, reused as-is from Modules 3.2–3.4) and list-row quick-downloads (`QRCodeRowActions`) regenerate on demand from the same saved config. This is the direct, concrete meaning of "regenerate visuals from saved config, don't store base64 images."
+
+### Dynamic-mode slugs: generated now, resolved later
+
+`qr_codes.slug` is required (and globally unique) for `mode = 'dynamic'` rows per Module 1.4's own check constraint. Actually resolving a slug through `/r/[slug]` is Module 3.6's job, but the identifier has to exist the moment a dynamic QR is first saved — `src/lib/qr/slug.ts`'s `generateRandomSlug()` (8-character random alphanumeric) fills that gap now. `saveQrCode`/`updateQrCode`/`duplicateQrCode` all retry with a fresh slug (up to 3 attempts) on a unique-constraint conflict (Postgres error `23505`) rather than surfacing a raw database error to the user — statistically near-impossible at 36^8 possibilities, but the retry is cheap and turns a theoretical edge case into a non-issue instead of a rare, confusing failure.
+
+### Save flow: one consolidated action, not two
+
+Before this module, both `QRGeneratorShell`'s header ("Save Changes", edit-only, disabled) and `QRDownloadActions` ("Save QR", disabled) implied saving — two buttons for one concept. Consolidated onto `QRGeneratorShell`'s header, the one place that actually owns all the state a save needs (name/mode/qrType/content/design, plus `isDirty`/`variant` already used for the unsaved-changes guard); `QRDownloadActions` went back to being purely about rendering/export, which is what its name says it does.
+
+- **Loading/success/failure feedback**: `saving` state disables the button and swaps its label ("Saving..."); a `savingRef` guard (checked synchronously before any state update) prevents a fast double-click from firing two saves before React re-renders the disabled button — the master prompt's explicit "prevent accidental duplicate submissions."
+- **Validation before saving**: the same `buildQrPayload()` gate the preview/download already used; a failed save shows a real `Alert`, not a silent no-op.
+- **Unauthenticated save, state preserved**: `/qr-generator` is public and renders the same `QRGeneratorShell`. If `saveQrCode` returns the `AUTH_REQUIRED` sentinel, the current builder state (name/mode/qrType/content/design) is written to `sessionStorage` (`src/lib/qr/draft-storage.ts` — sessionStorage, not localStorage, deliberately: a draft should only survive the current tab's login round-trip, not linger indefinitely) and the user is redirected to `/login?redirectTo=/dashboard/qr-codes/new`. That page checks for a staged draft on mount and restores it into the shell's initial state — a real, working "don't lose my work" flow, not just a redirect that drops it. Reading `sessionStorage` can only happen client-side, after the render that has to match server output, so the one-time `useEffect` read is the correct pattern here (not what the `set-state-in-effect` lint rule's cascading-render concern is actually about); a targeted, justified disable comment documents why.
+- **Edit pre-fill, finally real**: `QRGeneratorShell` gained `initialMode`/`initialQrType`/`initialContent`/`initialDesign` props (previously only `initialName` existed, explicitly deferred "until real persistence exists" back in Module 2.7 — this is that moment). `isDirty` and `handleReset` now compare/restore against these real initial values instead of hardcoded defaults. One consequence worth flagging: React Hook Form snapshots `defaultValues` once at mount and doesn't re-read props afterward, so `handleReset` alone wouldn't visually clear an already-mounted content form — `QRContentPanel` is now `key`ed by a counter bumped on Reset, forcing a clean remount. This was a latent, never-actually-exercised gap since Module 2.4 (the original Reset test only checked the name field); worth fixing now specifically because edit-mode Reset discards _real_ saved content, where the mismatch would have been a genuine, confusing bug, not just a cosmetic one.
+
+### Duplicate, archive, delete — one shared component, context-aware
+
+`src/components/dashboard/QRCodeRowActions.tsx` implements all three (plus a quick one-click download), used both on the dashboard list/cards and — with `showDownload={false}`, since the detail page already has the richer `QRDownloadActions` with a resolution picker — on the QR detail page's "Manage" section. One implementation, not two, for the same three actions in both places.
+
+- **Duplicate** always creates a genuinely new row: new UUID (Postgres' `gen_random_uuid()` default), new `created_at`/`updated_at` (the column defaults), a fresh slug for dynamic mode, `status` reset to `active` regardless of the source's status (a duplicate of an archived QR is a fresh, active copy, not a second archived one) — never shares an identifier with the source.
+- **Archive** is a plain `status` update (`setQrCodeStatus`), reversible, and is the action surfaced first/more prominently per the master prompt's own preference for "non-destructive archive/status change rather than deletion." The QR list (`/dashboard/qr-codes`) excludes `archived` rows by default; a "Show archived" link (`?archived=1`) reveals them — deliberately minimal (a link + a query param, not a full filter UI), since a real multi-dimension filter/search system is explicitly Module 3.10's job.
+- **Delete requires explicit confirmation** (a native `<dialog>`, the same pattern `DeleteAssetButton` established in Module 2.9) and is a real, permanent `DELETE`. Before wiring it, the actual Module 1.4 foreign-key behavior was checked rather than assumed: `qr_scan_events.qr_code_id` is `ON DELETE CASCADE` (a QR's scan history is meaningless without the QR, so it's correct for it to go too) while `qr_assets.qr_code_id` is `ON DELETE SET NULL` (uploaded files survive, they just become unlinked) — exactly the intentional design Module 1.4 already had, used as-is, not reinterpreted.
+
+### Analytics page: an honest empty state, not a broken link
+
+The QR detail page already links dynamic QRs to `/dashboard/qr-codes/[id]/analytics`. That page was still entirely mock-data-driven (Module 2.8), keyed to fake ids ("1"–"6") — every real QR created from this module onward would have hit a confusing `notFound()` there, a real regression this module's own changes would have caused if left alone. Fixed by switching the page to the real `getQrCodeById()` and rendering `AnalyticsView` with a genuinely empty `events: []` array for dynamic QRs — `AnalyticsView`'s existing, already-tested empty-state handling (Module 2.8) renders "No scans yet," which is simply true (no scan tracking exists until Module 3.7) rather than needing a separate "coming soon" message duplicating that UI. `src/lib/qr/mock-data.ts` is trimmed to just `MOCK_QR_CODES`, its only remaining real consumer being the Files page's mock "linked QR code" lookup (Module 2.9), which stays mock until Module 3.8 — `findMockQrCode`/`getMockScanEvents`/`MOCK_SCAN_EVENTS`/`MOCK_ANALYTICS_NOW` were dead code once nothing called them and were removed rather than left to rot.
+
+### Security verification: live, against the real database, not just RLS policies read on paper
+
+A script using the actual `@supabase/supabase-js` package (not curl, not a UI walkthrough) signed in as two separate throwaway accounts and exercised the exact operations `actions.ts`/`queries.ts` perform, directly against the live project:
+
+- User A inserts and reads their own QR — succeeds.
+- User B's `select`/`maybeSingle` on User A's QR id returns `null` (not an error) — RLS-blocked and nonexistent are indistinguishable, by design.
+- User B's `update`/`delete` on User A's QR affects 0 rows (verified via Postgres' exact row count, not just "no error") — and User A's row is confirmed unchanged/still present afterward.
+- User B's list query filtered to User A's `user_id` returns zero rows.
+- User A can update, archive, and delete their own QR — all succeed.
+
+11/11 checks passed. Both test accounts and all test rows were deleted immediately after; a follow-up count query confirmed zero rows across `auth.users`/`qr_codes`/`profiles` before moving on.
+
+### Browser verification: honestly partial, not glossed over
+
+A full real-browser click-through of save → list → detail → edit → duplicate → archive → delete was attempted but not completed this session — creating a fresh confirmed test account for it hit Supabase's project-wide email send rate limit (several confirmation emails had already gone out earlier in this same session for the RLS-verification accounts). Rather than skip verification silently or wait out the rate limit indefinitely, this is recorded honestly: the live 2-user RLS check above exercises the real database directly (the security-critical part), and 47 new automated tests exercise every piece of new interactive logic — `QRCodeRowActions` (duplicate/archive/delete/download, including the confirmation dialog and error paths), `QRGeneratorShell`'s save flow (create, edit, validation failure, the unauthenticated-draft-and-redirect path, duplicate-submission prevention), `actions.ts`/`queries.ts` (mocked-Supabase, covering RLS-blocked-as-0-rows explicitly), and `records.ts` (serialization round-trip, regenerating a saved QR). A production build and the full test suite both pass. Genuine live browser click-through remains open for a future session, same as Modules 3.2/3.3.
+
+### Verification
+
+- New tests: `records.test.ts` (10), `actions.test.ts` (14), `queries.test.ts` (7), `QRCodeRowActions.test.tsx` (7), `QRGeneratorShellSave.test.tsx` (5), `QRCodeCard.test.tsx` (4) — 47 new tests total.
+- `npm run typecheck`/`lint` (0 errors, same 8 pre-existing informational warnings)/`format:check`/`build` — all pass. The build step caught a real bug (the `"use server"` mixed-export issue above) that typecheck and lint both missed.
+- `npm run test` — **215/215 passing**.
+- Live verification against the real Supabase project: schema/RLS already existed (Module 1.4/1.5); this module's own read/write logic was exercised directly, live, as described above.
+
+### Acceptance status
+
+- [x] Save a generated QR code, with real loading/success/failure feedback and duplicate-submission prevention
+- [x] Give it a name (required — validated both client- and server-side)
+- [x] View saved QR codes in the dashboard (real data, empty state included)
+- [x] Open a QR detail page (real data, server-rendered regenerated preview)
+- [x] Edit supported QR properties (name/mode/type/content/design all genuinely pre-fill and save)
+- [x] Duplicate a QR code (new id, new timestamps, never shares identifiers with the source)
+- [x] Archive a QR code (non-destructive status change, hidden from the default list)
+- [x] Delete a QR code with confirmation (real dialog, real permanent delete, FK behavior used intentionally)
+- [x] Download a previously saved QR again (regenerated from saved config, never a stored image)
+- [x] Ownership from the authenticated session only — never a client-supplied `user_id`
+- [x] RLS-verified live against the real database with two real accounts

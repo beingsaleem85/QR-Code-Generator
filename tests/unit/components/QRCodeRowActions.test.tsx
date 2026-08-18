@@ -1,0 +1,147 @@
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { QRCodeRowActions } from "@/components/dashboard/QRCodeRowActions";
+import { DEFAULT_DESIGN_CONFIG } from "@/types/qr-design";
+import type { QrCodeRecord } from "@/lib/qr/records";
+
+const pushMock = vi.fn();
+const refreshMock = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock, refresh: refreshMock }),
+}));
+
+const duplicateQrCodeMock = vi.fn();
+const setQrCodeStatusMock = vi.fn();
+const deleteQrCodeMock = vi.fn();
+vi.mock("@/lib/qr/actions", () => ({
+  duplicateQrCode: (...args: unknown[]) => duplicateQrCodeMock(...args),
+  setQrCodeStatus: (...args: unknown[]) => setQrCodeStatusMock(...args),
+  deleteQrCode: (...args: unknown[]) => deleteQrCodeMock(...args),
+}));
+
+afterEach(() => cleanup());
+
+beforeEach(() => {
+  pushMock.mockReset();
+  refreshMock.mockReset();
+  duplicateQrCodeMock.mockReset();
+  setQrCodeStatusMock.mockReset();
+  deleteQrCodeMock.mockReset();
+
+  URL.createObjectURL = vi.fn(() => "blob:mock");
+  URL.revokeObjectURL = vi.fn();
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+    drawImage: vi.fn(),
+  } as unknown as CanvasRenderingContext2D);
+  vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,MOCK");
+  class MockImage {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    set src(_value: string) {
+      queueMicrotask(() => this.onload?.());
+    }
+  }
+  vi.stubGlobal("Image", MockImage);
+});
+
+const qrCode: QrCodeRecord = {
+  id: "qr-1",
+  name: "My Restaurant Menu",
+  slug: null,
+  mode: "static",
+  qrType: "url",
+  status: "active",
+  payloadData: { url: "https://example.com" },
+  designConfig: DEFAULT_DESIGN_CONFIG,
+  destinationUrl: null,
+  scanCount: 0,
+  createdAt: "2026-08-01T00:00:00.000Z",
+  updatedAt: "2026-08-02T00:00:00.000Z",
+};
+
+describe("QRCodeRowActions", () => {
+  it("duplicates and navigates to the new QR's detail page on success", async () => {
+    duplicateQrCodeMock.mockResolvedValue({ data: { id: "qr-2" } });
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={qrCode} />);
+
+    await user.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    expect(duplicateQrCodeMock).toHaveBeenCalledWith("qr-1");
+    expect(pushMock).toHaveBeenCalledWith("/dashboard/qr-codes/qr-2");
+  });
+
+  it("shows an error and does not navigate when duplicate fails", async () => {
+    duplicateQrCodeMock.mockResolvedValue({ error: "Couldn't find that QR code to duplicate." });
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={qrCode} />);
+
+    await user.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    expect(await screen.findByText("Couldn't find that QR code to duplicate.")).toBeInTheDocument();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("archives an active QR and shows Unarchive for an already-archived one", async () => {
+    setQrCodeStatusMock.mockResolvedValue({ data: { status: "archived" } });
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={qrCode} />);
+
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+
+    expect(setQrCodeStatusMock).toHaveBeenCalledWith("qr-1", "archived");
+    expect(refreshMock).toHaveBeenCalled();
+
+    cleanup();
+    render(<QRCodeRowActions qrCode={{ ...qrCode, status: "archived" }} />);
+    expect(screen.getByRole("button", { name: "Unarchive" })).toBeInTheDocument();
+  });
+
+  it("requires confirmation before deleting, then deletes and refreshes", async () => {
+    deleteQrCodeMock.mockResolvedValue({ data: { id: "qr-1" } });
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={qrCode} />);
+
+    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+    expect(deleteQrCodeMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(deleteQrCodeMock).toHaveBeenCalledWith("qr-1");
+    expect(refreshMock).toHaveBeenCalled();
+  });
+
+  it("shows an error when delete is blocked (e.g. RLS) instead of silently doing nothing", async () => {
+    deleteQrCodeMock.mockResolvedValue({ error: "Couldn't delete — it may already be gone." });
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={qrCode} />);
+
+    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(
+      await screen.findByText("Couldn't delete — it may already be gone."),
+    ).toBeInTheDocument();
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("regenerates and downloads a PNG from the saved config", async () => {
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={qrCode} />);
+
+    await user.click(screen.getByRole("button", { name: "Download" }));
+    expect(await screen.findByRole("button", { name: "Download" })).toBeEnabled();
+
+    expect(clickSpy).toHaveBeenCalledOnce();
+    clickSpy.mockRestore();
+  });
+
+  it("hides the Download button when showDownload is false (QR detail page)", () => {
+    render(<QRCodeRowActions qrCode={qrCode} showDownload={false} />);
+    expect(screen.queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
+  });
+});

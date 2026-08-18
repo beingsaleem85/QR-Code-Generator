@@ -4,10 +4,17 @@ import { EmptyState } from "@/components/dashboard/EmptyState";
 import { QRCodeCard } from "@/components/dashboard/QRCodeCard";
 import { QRCodeTable } from "@/components/dashboard/QRCodeTable";
 import { buttonVariants } from "@/components/ui/Button";
-import { MOCK_QR_CODES } from "@/lib/qr/mock-data";
+import { listQrCodes } from "@/lib/qr/queries";
 
-export default function QrCodesListPage() {
-  const qrCodes = MOCK_QR_CODES;
+interface QrCodesListPageProps {
+  searchParams: Promise<{ archived?: string }>;
+}
+
+export default async function QrCodesListPage({ searchParams }: QrCodesListPageProps) {
+  const { archived } = await searchParams;
+  const showArchived = archived === "1";
+  const qrCodes = await listQrCodes({ includeArchived: showArchived });
+  const visibleQrCodes = showArchived ? qrCodes : qrCodes.filter((qr) => qr.status !== "archived");
 
   return (
     <div className="flex flex-col gap-6">
@@ -20,27 +27,42 @@ export default function QrCodesListPage() {
         }
       />
 
-      <div className="px-4 pb-6 sm:px-6">
-        {qrCodes.length === 0 ? (
+      <div className="flex flex-col gap-4 px-4 pb-6 sm:px-6">
+        <div className="flex justify-end">
+          <Link
+            href={showArchived ? "/dashboard/qr-codes" : "/dashboard/qr-codes?archived=1"}
+            className="text-sm text-primary hover:underline"
+          >
+            {showArchived ? "Hide archived" : "Show archived"}
+          </Link>
+        </div>
+
+        {visibleQrCodes.length === 0 ? (
           <EmptyState
-            title="No QR codes yet"
-            description="Create your first QR code to see it here."
+            title={showArchived ? "No archived QR codes" : "No QR codes yet"}
+            description={
+              showArchived
+                ? "QR codes you archive will show up here."
+                : "Create your first QR code to see it here."
+            }
             action={
-              <Link
-                href="/dashboard/qr-codes/new"
-                className={buttonVariants({ className: "mt-2" })}
-              >
-                Create QR Code
-              </Link>
+              showArchived ? undefined : (
+                <Link
+                  href="/dashboard/qr-codes/new"
+                  className={buttonVariants({ className: "mt-2" })}
+                >
+                  Create QR Code
+                </Link>
+              )
             }
           />
         ) : (
           <>
             <div className="hidden overflow-x-auto md:block">
-              <QRCodeTable qrCodes={qrCodes} />
+              <QRCodeTable qrCodes={visibleQrCodes} />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">
-              {qrCodes.map((qrCode) => (
+              {visibleQrCodes.map((qrCode) => (
                 <QRCodeCard key={qrCode.id} qrCode={qrCode} />
               ))}
             </div>

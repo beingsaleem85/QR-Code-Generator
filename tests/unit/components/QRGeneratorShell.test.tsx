@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QRGeneratorShell } from "@/components/qr/QRGeneratorShell";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+}));
 
 afterEach(() => cleanup());
 
@@ -44,6 +48,11 @@ describe("QRGeneratorShell", () => {
     await user.click(screen.getByRole("button", { name: "Reset" }));
 
     expect(nameInput).toHaveValue("");
+  });
+
+  it("shows an enabled Save QR button in create mode", () => {
+    render(<QRGeneratorShell />);
+    expect(screen.getByRole("button", { name: "Save QR" })).toBeEnabled();
   });
 
   it("validates the URL field and shows an inline error on blur", async () => {

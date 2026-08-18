@@ -688,3 +688,32 @@ Known issues:
 Next:
 
 - Module 3.5 — Saving and Managing QR Codes
+
+## Module 3.5 — Saving and Managing QR Codes
+
+Status: COMPLETE
+
+Completed:
+
+- Data layer: `src/lib/qr/records.ts` (DB row ↔ app-layer mapping, `deriveDestinationSummary`), `queries.ts` (`listQrCodes`/`getQrCodeById`, RLS-scoped read-only), `actions.ts` (`"use server"`: `saveQrCode`/`updateQrCode`/`duplicateQrCode`/`setQrCodeStatus`/`deleteQrCode`), `action-types.ts` (split out `AUTH_REQUIRED`/types — a `"use server"` file may only export async functions), `slug.ts` (random slug generator for dynamic mode).
+- Consolidated saving onto `QRGeneratorShell`'s header (was two disabled buttons implying saving in two different places); real loading/error feedback, duplicate-submit guard, unauthenticated-save draft-and-redirect flow (`src/lib/qr/draft-storage.ts`), and genuine edit pre-fill (content/design/mode/type, not just name).
+- `src/components/dashboard/QRCodeRowActions.tsx`: real Duplicate/Archive/Delete(-with-confirmation)/Download, used on both the dashboard list and the QR detail page.
+- Dashboard overview, QR list (+ archived filter), detail, and edit pages all switched from `MOCK_QR_CODES` to real Supabase data. Detail page server-renders the real regenerated SVG preview directly.
+- Fixed a real regression this module's own changes would otherwise have caused: the analytics page was still 100% mock-keyed and would 404 for every real QR — switched to real QR lookup with an honest empty-events state (Module 3.7 owns real scan tracking). Trimmed now-dead mock-data exports.
+
+Verification:
+
+- New tests (47): `records.test.ts` (10), `actions.test.ts` (14), `queries.test.ts` (7), `QRCodeRowActions.test.tsx` (7), `QRGeneratorShellSave.test.tsx` (5), `QRCodeCard.test.tsx` (4).
+- `npm run typecheck` / `lint` (0 errors, same 8 pre-existing warnings) / `format:check` — pass
+- `rm -rf .next && npm run build` — pass, all 25 routes build. **Caught a real bug this way, not via typecheck/lint**: a `"use server"` file exporting a plain constant alongside its async functions fails Next's build with an opaque "module has no exports" error — fixed by splitting the constant into `action-types.ts`.
+- `npm run test` — **215/215 passing**
+- **Live 2-user RLS verification against the real Supabase project** (not just RLS policies read on paper): a script using the real `@supabase/supabase-js` package signed in as two throwaway accounts and directly exercised insert/select/update/delete — 11/11 checks passed (User A save+read own; User B blocked from reading/updating/deleting User A's row, verified via exact affected-row counts, not just absence of an error; User A can update/archive/delete their own row). Both accounts and all test rows deleted immediately after; confirmed 0 rows left in `auth.users`/`qr_codes`/`profiles`.
+- **Live browser click-through attempted, not completed**: hit Supabase's project-wide email rate limit trying to provision a fresh confirmed account for it (several confirmation emails already sent earlier this session). Documented honestly in `docs/ARCHITECTURE.md` rather than glossed over — relying on the live RLS check (the security-critical part) plus the 47 new automated tests as the verification record instead.
+
+Known issues:
+
+- None blocking. Full real-browser UI click-through of the save/duplicate/archive/delete flow remains open for a future session (same open item as Modules 3.2/3.3's Browser-pane limitation, plus this session's email-rate-limit constraint).
+
+Next:
+
+- Module 3.6 — Dynamic QR Codes

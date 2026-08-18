@@ -32,8 +32,10 @@ function triggerDownload(href: string, filename: string) {
  * Real PNG/SVG download (Module 3.2), with the full download/export
  * experience (Module 3.4) built on top: PNG resolution presets, and
  * `slugifyForFilename()`'s complete sanitization policy. SVG has no size
- * selector — it's vector, so it's already crisp at any size. "Save QR"
- * stays disabled until real persistence exists (Module 3.5).
+ * selector — it's vector, so it's already crisp at any size. Saving lives
+ * in `QRGeneratorShell`'s header (Module 3.5), not here — this component
+ * only ever handles rendering/export, whether for a live draft or an
+ * already-saved QR (the QR detail page reuses it directly).
  */
 export function QRDownloadActions({ qrType, content, design, name }: QRDownloadActionsProps) {
   const [downloading, setDownloading] = useState<"png" | "svg" | null>(null);
@@ -68,10 +70,6 @@ export function QRDownloadActions({ qrType, content, design, name }: QRDownloadA
 
   return (
     <div className="flex flex-col gap-3">
-      <Button variant="primary" disabled>
-        Save QR
-      </Button>
-
       <FormField label="PNG size" htmlFor="png-size">
         <Select
           id="png-size"

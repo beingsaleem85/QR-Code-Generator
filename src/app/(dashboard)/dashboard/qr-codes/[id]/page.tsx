@@ -1,22 +1,33 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
+import { QRCodeRowActions } from "@/components/dashboard/QRCodeRowActions";
 import { QRCodeStatusBadge } from "@/components/dashboard/QRCodeStatusBadge";
-import { Button, buttonVariants } from "@/components/ui/Button";
+import { QRDownloadActions } from "@/components/qr/QRDownloadActions";
+import { buttonVariants } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { QrPlaceholderGraphic } from "@/components/ui/QrPlaceholderGraphic";
 import { getQrTypeDefinition } from "@/lib/qr/registry";
-import { findMockQrCode } from "@/lib/qr/mock-data";
+import { buildQrPayload } from "@/lib/qr/render";
+import { deriveDestinationSummary } from "@/lib/qr/records";
+import { getQrCodeById } from "@/lib/qr/queries";
+import { renderStyledQrSvg } from "@/lib/qr/styled-svg";
 
 export default async function QrCodeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const qrCode = findMockQrCode(id);
+  const qrCode = await getQrCodeById(id);
 
   if (!qrCode) {
     notFound();
   }
 
   const typeDefinition = getQrTypeDefinition(qrCode.qrType);
+  const destinationSummary = deriveDestinationSummary(qrCode.qrType, qrCode.payloadData);
+
+  // Server-rendered — no client JS needed just to see the QR. Real
+  // regeneration from saved config (Module 3.5), never a stored image.
+  const payload = buildQrPayload(qrCode.qrType, qrCode.payloadData);
+  const preview = payload ? await renderStyledQrSvg(payload, qrCode.designConfig) : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -34,17 +45,24 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
 
       <div className="grid grid-cols-1 gap-6 px-4 pb-6 sm:px-6 lg:grid-cols-[280px_1fr]">
         <Card className="flex flex-col items-center gap-4 p-6">
-          <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-border bg-background">
-            <QrPlaceholderGraphic size={120} />
+          <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-border bg-background p-3">
+            {preview ? (
+              <div
+                role="img"
+                aria-label="QR code preview"
+                className="h-full w-full [&>svg]:h-full [&>svg]:w-full"
+                dangerouslySetInnerHTML={{ __html: preview.svg }}
+              />
+            ) : (
+              <QrPlaceholderGraphic size={120} />
+            )}
           </div>
-          <div className="flex w-full flex-col gap-2">
-            <Button variant="secondary" disabled className="w-full">
-              Download PNG
-            </Button>
-            <Button variant="secondary" disabled className="w-full">
-              Download SVG
-            </Button>
-          </div>
+          <QRDownloadActions
+            qrType={qrCode.qrType}
+            content={qrCode.payloadData}
+            design={qrCode.designConfig}
+            name={qrCode.name}
+          />
         </Card>
 
         <div className="flex flex-col gap-4">
@@ -61,7 +79,7 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
               <p className="text-xs font-medium text-muted-foreground uppercase">
                 Destination / content
               </p>
-              <p className="text-sm break-all text-foreground">{qrCode.destinationSummary}</p>
+              <p className="text-sm break-all text-foreground">{destinationSummary}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-sm">
@@ -95,20 +113,10 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
             </Card>
           ) : null}
 
-          <div className="flex flex-col gap-3 rounded-xl border border-destructive/30 bg-surface p-5 shadow-sm">
-            <p className="text-sm font-medium text-foreground">Danger zone</p>
-            <div className="flex flex-wrap gap-3">
-              <Button variant="secondary" disabled>
-                Archive
-              </Button>
-              <Button variant="destructive" disabled>
-                Delete
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Archive and delete are wired to real data in Module 3.11.
-            </p>
-          </div>
+          <Card className="flex flex-col gap-3 p-5">
+            <p className="text-sm font-medium text-foreground">Manage</p>
+            <QRCodeRowActions qrCode={qrCode} showDownload={false} />
+          </Card>
         </div>
       </div>
     </div>

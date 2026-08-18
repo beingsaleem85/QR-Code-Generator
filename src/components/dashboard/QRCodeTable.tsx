@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { QRCodeRowActions } from "@/components/dashboard/QRCodeRowActions";
 import { QRCodeStatusBadge } from "@/components/dashboard/QRCodeStatusBadge";
-import type { QRCodeSummary } from "@/types/qr-record";
+import type { QrCodeRecord } from "@/lib/qr/records";
 
 interface QRCodeTableProps {
-  qrCodes: QRCodeSummary[];
+  qrCodes: QrCodeRecord[];
 }
 
 export function QRCodeTable({ qrCodes }: QRCodeTableProps) {
@@ -17,6 +18,7 @@ export function QRCodeTable({ qrCodes }: QRCodeTableProps) {
           <th className="py-2 font-medium">Status</th>
           <th className="py-2 font-medium">Scans</th>
           <th className="py-2 font-medium">Updated</th>
+          <th className="py-2 font-medium">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -37,6 +39,9 @@ export function QRCodeTable({ qrCodes }: QRCodeTableProps) {
             </td>
             <td className="py-2 text-muted-foreground">{qrCode.scanCount}</td>
             <td className="py-2 text-muted-foreground">{qrCode.updatedAt}</td>
+            <td className="py-2">
+              <QRCodeRowActions qrCode={qrCode} />
+            </td>
           </tr>
         ))}
       </tbody>

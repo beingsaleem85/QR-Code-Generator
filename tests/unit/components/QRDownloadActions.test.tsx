@@ -150,17 +150,4 @@ describe("QRDownloadActions", () => {
 
     createElementSpy.mockRestore();
   });
-
-  it("keeps Save QR disabled — real persistence arrives in Module 3.5", () => {
-    render(
-      <QRDownloadActions
-        qrType="url"
-        content={{ url: "example.com" }}
-        design={DEFAULT_DESIGN_CONFIG}
-        name="My QR"
-      />,
-    );
-
-    expect(screen.getByRole("button", { name: "Save QR" })).toBeDisabled();
-  });
 });
