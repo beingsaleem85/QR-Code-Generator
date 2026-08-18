@@ -88,6 +88,17 @@ describe("renderStyledQrSvg", () => {
     expect(svg).not.toContain("<image");
   });
 
+  it("omits the background fill entirely when transparentBackground is set (Module 3.4 acceptance criterion)", async () => {
+    const design = {
+      ...DEFAULT_DESIGN_CONFIG,
+      colors: { ...DEFAULT_DESIGN_CONFIG.colors, transparentBackground: true },
+    };
+    const { svg } = await renderStyledQrSvg(PAYLOAD, design);
+    // No rect covering the QR area in the default background color — a
+    // transparent canvas, not a rect painted the "wrong" transparent color.
+    expect(svg).not.toContain(DEFAULT_DESIGN_CONFIG.colors.background);
+  });
+
   it("renders a frame border and escaped CTA text for the simple frame style", async () => {
     const design = {
       ...DEFAULT_DESIGN_CONFIG,

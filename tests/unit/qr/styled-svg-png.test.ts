@@ -57,4 +57,36 @@ describe("renderStyledQrPngDataUrl", () => {
     const { warnings } = await renderStyledQrPngDataUrl("https://example.com", design);
     expect(warnings.length).toBeGreaterThan(0);
   });
+
+  it("scales the export canvas to the requested resolution (Module 3.4 presets)", async () => {
+    for (const size of [512, 1024, 2048]) {
+      const drawImage = vi.fn();
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+        drawImage,
+      } as unknown as CanvasRenderingContext2D);
+
+      await renderStyledQrPngDataUrl("https://example.com", DEFAULT_DESIGN_CONFIG, size);
+
+      expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, size, size);
+    }
+  });
+
+  it("includes the logo in the exported PNG's source SVG regardless of resolution", async () => {
+    const design = {
+      ...DEFAULT_DESIGN_CONFIG,
+      logo: { ...DEFAULT_DESIGN_CONFIG.logo, assetUrl: "data:image/png;base64,LOGO" },
+    };
+    let capturedSvg: string | null = null;
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      void blob.text().then((text) => {
+        capturedSvg = text;
+      });
+      return "blob:mock";
+    });
+
+    await renderStyledQrPngDataUrl("https://example.com", design, 1024);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(capturedSvg).toContain("data:image/png;base64,LOGO");
+  });
 });

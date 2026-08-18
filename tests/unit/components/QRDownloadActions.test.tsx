@@ -111,6 +111,46 @@ describe("QRDownloadActions", () => {
     createElementSpy.mockRestore();
   });
 
+  it("defaults the PNG size selector to 1024px", () => {
+    render(
+      <QRDownloadActions
+        qrType="url"
+        content={{ url: "example.com" }}
+        design={DEFAULT_DESIGN_CONFIG}
+        name="My QR"
+      />,
+    );
+
+    expect(screen.getByLabelText("PNG size")).toHaveValue("1024");
+  });
+
+  it("renders the selected PNG size onto the export canvas", async () => {
+    const createElementSpy = vi.spyOn(document, "createElement");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    const user = userEvent.setup();
+    render(
+      <QRDownloadActions
+        qrType="url"
+        content={{ url: "example.com" }}
+        design={DEFAULT_DESIGN_CONFIG}
+        name="My QR"
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText("PNG size"), "2048");
+    await user.click(screen.getByRole("button", { name: "Download PNG" }));
+    expect(await screen.findByRole("button", { name: "Download PNG" })).toBeEnabled();
+
+    const canvas = createElementSpy.mock.results
+      .map((result) => result.value)
+      .find((value): value is HTMLCanvasElement => value instanceof HTMLCanvasElement);
+
+    expect(canvas?.width).toBe(2048);
+
+    createElementSpy.mockRestore();
+  });
+
   it("keeps Save QR disabled — real persistence arrives in Module 3.5", () => {
     render(
       <QRDownloadActions

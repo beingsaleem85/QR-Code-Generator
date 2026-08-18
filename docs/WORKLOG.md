@@ -663,3 +663,28 @@ Known issues:
 Next:
 
 - Module 3.4 — QR Download and Export
+
+## Module 3.4 — QR Download and Export
+
+Status: COMPLETE
+
+Completed:
+
+- `QRDownloadActions` gained a "PNG size" selector (512/1024/2048px, default 1024), wired to `renderStyledQrPngDataUrl`'s existing `targetWidth` parameter — no new rendering logic needed. SVG has no size control (vector, always crisp) with a helper line saying so.
+- `slugifyForFilename()` (`src/lib/qr/render.ts`) is now the complete policy: Unicode-normalizes and strips diacritics (`\p{M}`, not a hardcoded code-point range, so any script's combining marks are handled), length-capped at 60 chars. Windows-reserved device names deliberately not special-cased — reasoning in `docs/ARCHITECTURE.md`.
+
+Verification:
+
+- Extended `slugifyForFilename` tests (diacritics, CJK-only fallback, length cap, reserved-name input).
+- New tests: resolution scaling verified across all 3 presets via the mocked canvas's `drawImage` args; logo presence confirmed in the exported PNG's source SVG; explicit transparent-background test at the SVG level; PNG size selector default + selected-size-reaches-canvas tests.
+- `npm run typecheck` / `lint` (0 errors, same 8 pre-existing warnings) / `format:check` — pass
+- `rm -rf .next && npm run build` — pass, all 25 routes build
+- `npm run test` — **168/168 passing**
+
+Known issues:
+
+- None blocking. JPEG and print PDF skipped — both explicitly optional/conditional in the master prompt, and PNG+SVG already cover this app's real use cases.
+
+Next:
+
+- Module 3.5 — Saving and Managing QR Codes

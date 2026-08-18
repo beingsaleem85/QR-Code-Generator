@@ -79,4 +79,22 @@ describe("slugifyForFilename", () => {
     expect(slugifyForFilename("   ")).toBe("qr-code");
     expect(slugifyForFilename("!!!")).toBe("qr-code");
   });
+
+  it("strips diacritics down to their base letters instead of dropping them", () => {
+    expect(slugifyForFilename("Café Menu")).toBe("cafe-menu");
+  });
+
+  it("falls back when the name has no ASCII-representable characters at all", () => {
+    expect(slugifyForFilename("日本語")).toBe("qr-code");
+  });
+
+  it("caps length rather than producing an unbounded filename", () => {
+    const slug = slugifyForFilename("a".repeat(200));
+    expect(slug.length).toBeLessThanOrEqual(60);
+    expect(slug.endsWith("-")).toBe(false);
+  });
+
+  it("a bare reserved Windows device name still slugifies (callers always append a suffix)", () => {
+    expect(slugifyForFilename("CON")).toBe("con");
+  });
 });

@@ -57,16 +57,33 @@ export async function renderQrPngDataUrl(
 }
 
 /**
- * A minimal, working default filename — lowercase, non-alphanumerics
- * collapsed to single hyphens, trimmed. Full filename-sanitization policy
- * (safe-filename edge cases, uniqueness) is explicitly Module 3.4's scope;
- * this exists only so today's download has *a* sane name instead of none.
+ * Full filename-sanitization policy (Module 3.4): Unicode-normalizes and
+ * strips diacritical marks first (so "Café" contributes "cafe", not
+ * nothing), then lowercases, collapses any run of non [a-z0-9] characters
+ * (including untransliterable scripts like CJK, which have no ASCII
+ * equivalent to fall back to) to a single hyphen, trims the edges, and
+ * caps length.
+ *
+ * Windows-reserved device names (CON, NUL, COM1, ...) are deliberately
+ * NOT special-cased here: every call site appends a suffix before the
+ * extension (`${filename}-qr.png`), so the actual on-disk name this
+ * produces can never collide with a bare reserved name — adding a check
+ * for a case that structurally can't occur would just be dead validation.
  */
+const MAX_FILENAME_LENGTH = 60;
+
 export function slugifyForFilename(name: string, fallback = "qr-code"): string {
-  const slug = name
+  // \p{M} matches any Unicode combining-mark character — this is what
+  // NFKD splits an accented letter into (e.g. "e" + a combining acute).
+  const withoutDiacritics = name.normalize("NFKD").replace(/\p{M}/gu, "");
+
+  const slug = withoutDiacritics
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/^-+|-+$/g, "")
+    .slice(0, MAX_FILENAME_LENGTH)
+    .replace(/-+$/g, "");
+
   return slug || fallback;
 }
