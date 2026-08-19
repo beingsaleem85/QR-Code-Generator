@@ -8,6 +8,7 @@ function createChain(result: { data?: unknown; error?: unknown; count?: number }
     neq: vi.fn(() => chain),
     gte: vi.fn(() => chain),
     order: vi.fn(() => chain),
+    limit: vi.fn(() => chain),
     maybeSingle: vi.fn(() => Promise.resolve(result)),
     then: (resolve: (value: typeof result) => void) => resolve(result),
   };
@@ -179,5 +180,49 @@ describe("countDynamicQrCodes", () => {
     const { countDynamicQrCodes } = await loadQueries(chain);
 
     await expect(countDynamicQrCodes()).rejects.toThrow("connection failed");
+  });
+});
+
+const FEEDBACK_ROW = {
+  id: "fb-1",
+  rating: 5,
+  comment: "Great service!",
+  contact: null,
+  submitted_at: "2026-08-19T09:00:00.000Z",
+};
+
+describe("listQrFeedback", () => {
+  it("maps every returned row to a QrFeedbackSubmission", async () => {
+    const chain = createChain({ data: [FEEDBACK_ROW], error: null });
+    const { listQrFeedback } = await loadQueries(chain);
+
+    const submissions = await listQrFeedback("qr-1");
+
+    expect(submissions).toEqual([
+      {
+        id: "fb-1",
+        rating: 5,
+        comment: "Great service!",
+        contact: null,
+        submittedAt: "2026-08-19T09:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("scopes the query to the given QR code, newest first", async () => {
+    const chain = createChain({ data: [], error: null });
+    const { listQrFeedback } = await loadQueries(chain);
+
+    await listQrFeedback("qr-1");
+
+    expect(chain.eq).toHaveBeenCalledWith("qr_code_id", "qr-1");
+    expect(chain.order).toHaveBeenCalledWith("submitted_at", { ascending: false });
+  });
+
+  it("throws on a real database error", async () => {
+    const chain = createChain({ data: null, error: { message: "connection failed" } });
+    const { listQrFeedback } = await loadQueries(chain);
+
+    await expect(listQrFeedback("qr-1")).rejects.toThrow("connection failed");
   });
 });

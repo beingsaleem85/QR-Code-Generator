@@ -167,4 +167,36 @@ describe("syncQrAssets", () => {
       { onConflict: "bucket,path" },
     );
   });
+
+  it("upserts only the menu items that have a photo, in bucket qr-gallery", async () => {
+    const client = mockSupabase([
+      { data: [], error: null },
+      { data: null, error: null },
+    ]);
+
+    await syncQrAssets(client as never, "user-1", "qr-1", "menu", {
+      title: "Dinner Menu",
+      items: [
+        { name: "Burger", price: "$12" },
+        {
+          name: "Fries",
+          photo: {
+            path: "user-1/a/fries.jpg",
+            fileName: "fries.jpg",
+            sizeBytes: 30,
+            mimeType: "image/jpeg",
+          },
+        },
+      ],
+    });
+
+    const upsertChain = client.from.mock.results[1].value;
+    const upserted = upsertChain.upsert.mock.calls[0][0];
+    expect(upserted).toHaveLength(1);
+    expect(upserted[0]).toMatchObject({
+      asset_type: "menu_item_photo",
+      bucket: "qr-gallery",
+      path: "user-1/a/fries.jpg",
+    });
+  });
 });

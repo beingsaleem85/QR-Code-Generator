@@ -2,7 +2,9 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { toQrCodeRecord, type QrCodeDbRow, type QrCodeRecord } from "@/lib/qr/records";
 import { toQrScanEvent, type QrScanEventDbRow } from "@/lib/qr/scan-records";
+import { toQrFeedbackSubmission, type QrFeedbackSubmissionDbRow } from "@/lib/qr/feedback-records";
 import type { QrScanEvent } from "@/types/analytics";
+import type { QrFeedbackSubmission } from "@/types/feedback";
 
 /**
  * Read-only, RLS-scoped `qr_codes` queries for Server Components. No
@@ -90,4 +92,27 @@ export async function listScanEvents(qrCodeId: string): Promise<QrScanEvent[]> {
   if (error) throw new Error(error.message);
 
   return (data as QrScanEventDbRow[]).map(toQrScanEvent);
+}
+
+const FEEDBACK_SUBMISSIONS_LIMIT = 50;
+
+/**
+ * Most recent submissions for one feedback QR, owner-only (RLS's
+ * `qr_feedback_submissions_select_own` policy). Bounded rather than
+ * paginated — same "keep it simple" call Module 3.7 made for scan events,
+ * appropriate at the same small scale.
+ */
+export async function listQrFeedback(qrCodeId: string): Promise<QrFeedbackSubmission[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("qr_feedback_submissions")
+    .select("id, rating, comment, contact, submitted_at")
+    .eq("qr_code_id", qrCodeId)
+    .order("submitted_at", { ascending: false })
+    .limit(FEEDBACK_SUBMISSIONS_LIMIT);
+
+  if (error) throw new Error(error.message);
+
+  return (data as QrFeedbackSubmissionDbRow[]).map(toQrFeedbackSubmission);
 }

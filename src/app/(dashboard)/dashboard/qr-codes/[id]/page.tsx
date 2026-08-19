@@ -9,9 +9,9 @@ import { Card } from "@/components/ui/Card";
 import { QrPlaceholderGraphic } from "@/components/ui/QrPlaceholderGraphic";
 import { getQrTypeDefinition } from "@/lib/qr/registry";
 import { resolveEncodedPayload } from "@/lib/qr/render";
-import { buildRedirectUrl } from "@/lib/qr/redirect-url";
+import { buildLandingPageUrl, buildRedirectUrl } from "@/lib/qr/redirect-url";
 import { deriveDestinationSummary } from "@/lib/qr/records";
-import { getQrCodeById } from "@/lib/qr/queries";
+import { getQrCodeById, listQrFeedback } from "@/lib/qr/queries";
 import { renderStyledQrSvg } from "@/lib/qr/styled-svg";
 
 export default async function QrCodeDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -24,6 +24,7 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
 
   const typeDefinition = getQrTypeDefinition(qrCode.qrType);
   const destinationSummary = deriveDestinationSummary(qrCode.qrType, qrCode.payloadData);
+  const feedback = qrCode.qrType === "feedback" ? await listQrFeedback(qrCode.id) : [];
 
   // Server-rendered — no client JS needed just to see the QR. Real
   // regeneration from saved config (Module 3.5); dynamic codes always
@@ -97,10 +98,14 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
                 <p className="text-xs font-medium text-muted-foreground uppercase">
                   Printed QR links to
                 </p>
-                <p className="text-sm break-all text-foreground">{buildRedirectUrl(qrCode.slug)}</p>
+                <p className="text-sm break-all text-foreground">
+                  {typeDefinition.needsLandingPage
+                    ? buildLandingPageUrl(qrCode.slug)
+                    : buildRedirectUrl(qrCode.slug)}
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  This link never changes — edit the destination above to redirect it elsewhere
-                  without reprinting the code.
+                  This link never changes — edit the content above to update it without reprinting
+                  the code.
                 </p>
               </div>
             ) : null}
@@ -133,6 +138,42 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
               >
                 View analytics &rarr;
               </Link>
+            </Card>
+          ) : null}
+
+          {qrCode.qrType === "feedback" ? (
+            <Card className="flex flex-col gap-3 p-5">
+              <p className="text-sm font-medium text-foreground">Feedback ({feedback.length})</p>
+              {feedback.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No submissions yet.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {feedback.map((submission) => (
+                    <li key={submission.id} className="rounded-lg border border-border p-3 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        {submission.rating !== null ? (
+                          <span className="font-medium text-foreground">
+                            {submission.rating} / 5
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">No rating</span>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {submission.submittedAt}
+                        </span>
+                      </div>
+                      {submission.comment ? (
+                        <p className="mt-1 text-foreground">{submission.comment}</p>
+                      ) : null}
+                      {submission.contact ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Contact: {submission.contact}
+                        </p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </Card>
           ) : null}
 

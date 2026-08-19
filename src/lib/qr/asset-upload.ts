@@ -27,6 +27,14 @@ export const ASSET_BUCKETS = {
     maxSizeBytes: 15 * 1024 * 1024,
     allowedMimeTypes: ["audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg"],
   },
+  menu: {
+    // Menu item photos are images like a gallery image — reuses the same
+    // bucket (and its Module 3.8 public-read policy) rather than
+    // provisioning a dedicated bucket for a single field on one QR type.
+    bucket: "qr-gallery",
+    maxSizeBytes: 10 * 1024 * 1024,
+    allowedMimeTypes: ["image/png", "image/jpeg", "image/webp", "image/gif"],
+  },
 } as const;
 
 export type AssetKind = keyof typeof ASSET_BUCKETS;

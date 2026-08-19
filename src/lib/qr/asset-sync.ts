@@ -54,6 +54,28 @@ function galleryAssets(content: Record<string, unknown>): AssetRef[] {
     }));
 }
 
+interface MenuItemShape {
+  photo?: FileFieldShape;
+}
+
+/** One optional photo per menu item, keyed the same way `galleryAssets` handles an image array. */
+function menuAssets(content: Record<string, unknown>): AssetRef[] {
+  const items = Array.isArray(content.items) ? content.items : [];
+  return items
+    .map((item) => (item as MenuItemShape).photo)
+    .filter(
+      (photo): photo is FileFieldShape =>
+        !!photo && typeof photo === "object" && typeof photo.path === "string",
+    )
+    .map((photo) => ({
+      assetType: "menu_item_photo",
+      bucket: "qr-gallery",
+      path: photo.path as string,
+      mimeType: typeof photo.mimeType === "string" ? photo.mimeType : "application/octet-stream",
+      sizeBytes: typeof photo.sizeBytes === "number" ? photo.sizeBytes : 0,
+    }));
+}
+
 function extractAssetRefs(qrType: QRType, content: Record<string, unknown>): AssetRef[] {
   switch (qrType) {
     case "pdf":
@@ -62,6 +84,8 @@ function extractAssetRefs(qrType: QRType, content: Record<string, unknown>): Ass
       return galleryAssets(content);
     case "audio":
       return singleFileAsset("audio_track", "qr-media", content);
+    case "menu":
+      return menuAssets(content);
     default:
       return [];
   }

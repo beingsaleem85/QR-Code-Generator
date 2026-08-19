@@ -15,6 +15,11 @@ const IMPLEMENTED_TYPES = [
   "images",
   "audio",
   "video",
+  "app",
+  "social",
+  "multi_link",
+  "menu",
+  "feedback",
 ] as const;
 
 describe("QR type registry", () => {

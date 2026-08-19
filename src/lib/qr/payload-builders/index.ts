@@ -11,3 +11,8 @@ export * from "./pdf";
 export * from "./images";
 export * from "./audio";
 export * from "./video";
+export * from "./app";
+export * from "./social";
+export * from "./multi-link";
+export * from "./menu";
+export * from "./feedback";

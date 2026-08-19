@@ -860,3 +860,31 @@ Known issues:
 Next:
 
 - Module 3.9 — Hosted Landing Page QR Types
+
+## Module 3.9 — Hosted Landing Page QR Types
+
+Status: COMPLETE
+
+Completed:
+
+- **Five remaining landing-page types built**: `app`, `social`, `multi_link`, `menu`, `feedback` move from `notYetImplementedQrSchema` to real Zod schemas (`src/lib/validation/qr/`) and payload builders. `app`'s registry entry corrected from `staticSupport: true` (a Module 1.3 default that turned out non-viable — three independent link fields, no single canonical one, and a device-aware CTA needs a server) to `false`, matching every other `needsLandingPage: true` type except `video`.
+- **`payload_data` stays the single content store** for all five, same as Module 3.8's file types — `landing_page_config`'s own migration comment earmarked it for this module, but introducing a second read/write path for only 5 of 20 types would be real complexity for no functional gain given `payload_data` already works uniformly; documented explicitly in `docs/ARCHITECTURE.md` rather than silently diverging from that old comment.
+- **`app`**: device-aware CTA ordering via `headers()` + Module 3.7's `parseUserAgent()` (iOS visitor sees the App Store link first, Android sees Google Play first), never hiding the other safe links. **`social`**: full profile page (avatar/description/ordered links/social icons/3 theme presets). **`multi_link`**: the bare-bones link-in-bio sibling, deliberately not sharing `social`'s schema. **`menu`**: flat item list with a free-text `category` field (not nested category arrays) and an optional per-item photo, reusing the `qr-gallery` bucket and its Module 3.8 public-read policy rather than a new bucket.
+- **`feedback`, the one type with real anonymous write-back**: new migration `20260819190000_add_feedback_submissions.sql` — `qr_feedback_submissions` (owner-only read, zero write policy for any role) plus a `SECURITY DEFINER` RPC, `submit_qr_feedback(p_slug, ...)`, mirroring `record_qr_scan`'s "resolve the slug internally, silently no-op on any miss" pattern. `consent` is a pure app-layer gate (checked before the RPC is ever called) — never a stored column. A small, real "Feedback (N)" list was added to the QR detail page (`listQrFeedback()`, RLS-scoped, bounded to 50 rows) since collecting feedback with no way to view it would be a real gap.
+- **Fixed in passing**: the QR detail page's "Printed QR links to" field always showed `/r/[slug]`, wrong for every `needsLandingPage: true` type since Module 3.8 (silently, for 4 types; now would've been wrong for 9). Now branches the same way `resolveEncodedPayload` does.
+
+Verification:
+
+- New tests (37): `app.test.ts`, `social.test.ts`, `multi-link.test.ts`, `menu.test.ts`, `feedback.test.ts`, `feedback-actions.test.ts`, `asset-sync.test.ts` (+1), `queries.test.ts` (+3), `registry.test.ts` (updated). One existing test (`QRGeneratorShell.test.tsx`) rewritten to assert actual list-membership change instead of a size comparison that stopped being meaningful once static/dynamic type counts became balanced.
+- `npm run typecheck` / `npx eslint .` (0 errors, 11 pre-existing warnings) / `npx prettier --check .` — pass.
+- `npx vitest run` — **386/386 passing** across 61 files.
+- `rm -rf .next && npm run build` — pass, all routes build, no leftover `/api/test-only-*` routes.
+- **Live verification against the real Supabase project**: migration pushed (using a `SUPABASE_ACCESS_TOKEN` the user supplied directly for this purpose — used only as an ephemeral shell variable, never written to any file). All 5 types driven through the real Server Actions end to end (App/Social/Multi-Link/Menu saved and rendered correctly on `/p/[slug]`; Menu's photo upload confirmed as a real `qr_assets` row serving real bytes via signed URL). Feedback's write-back was proven **genuinely anonymous** — a raw `curl` carrying only the Supabase anon key, no session at all, successfully inserted a real row via `submit_qr_feedback`; pausing the QR then made a second anonymous attempt silently no-op (same success response, zero new rows) rather than error; a direct anonymous `select` against `qr_feedback_submissions` returned zero rows (RLS-blocked); the owner's own feedback list correctly showed both real submissions. The `/r/` → `/p/` detail-page fix was confirmed live. All test data, the throwaway account, and a harmless unconfirmed account left over from Module 3.8 were cleaned up; `mailer_autoconfirm` restored to `false`; the temporary verification route removed. Final state: exactly one `auth.users` row (the permanent account) and zero test data anywhere. Full detail in `docs/ARCHITECTURE.md`.
+
+Known issues:
+
+- None blocking. The feedback list on the QR detail page is intentionally minimal (no pagination/export/per-row delete) — a scoped follow-up if ever needed.
+
+Next:
+
+- Module 3.10 — Dashboard Search, Filters, and Organization

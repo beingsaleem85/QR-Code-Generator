@@ -30,11 +30,18 @@ describe("QRGeneratorShell", () => {
     const user = userEvent.setup();
     render(<QRGeneratorShell />);
 
-    const staticCount = screen.getAllByRole("option").length;
-    await user.click(screen.getByRole("tab", { name: "dynamic" }));
-    const dynamicCount = screen.getAllByRole("option").length;
+    // Static-only and dynamic-only types are now roughly balanced in
+    // count (Module 3.9 added several dynamic-only landing-page types),
+    // so a plain "fewer options" check is no longer a reliable signal —
+    // assert the actual membership change instead: a static-only type
+    // (Text) disappears, a dynamic-only type (PDF) appears.
+    expect(screen.getByRole("option", { name: "Text" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "PDF" })).not.toBeInTheDocument();
 
-    expect(dynamicCount).toBeLessThan(staticCount);
+    await user.click(screen.getByRole("tab", { name: "dynamic" }));
+
+    expect(screen.queryByRole("option", { name: "Text" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "PDF" })).toBeInTheDocument();
   });
 
   it("clears the name field when Reset is clicked", async () => {
