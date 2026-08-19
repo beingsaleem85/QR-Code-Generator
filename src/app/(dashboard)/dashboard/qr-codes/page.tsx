@@ -3,18 +3,27 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { QRCodeCard } from "@/components/dashboard/QRCodeCard";
 import { QRCodeTable } from "@/components/dashboard/QRCodeTable";
+import { QRCodesFilterBar } from "@/components/dashboard/QRCodesFilterBar";
+import { FolderManager } from "@/components/dashboard/FolderManager";
+import { Pagination } from "@/components/dashboard/Pagination";
 import { buttonVariants } from "@/components/ui/Button";
-import { listQrCodes } from "@/lib/qr/queries";
+import { listQrCodesPage } from "@/lib/qr/queries";
+import { parseQrListSearchParams, type QrListSearchParams } from "@/lib/qr/list-filters";
+import { listMyFolders } from "@/lib/folders/queries";
 
 interface QrCodesListPageProps {
-  searchParams: Promise<{ archived?: string }>;
+  searchParams: Promise<QrListSearchParams>;
 }
 
 export default async function QrCodesListPage({ searchParams }: QrCodesListPageProps) {
-  const { archived } = await searchParams;
-  const showArchived = archived === "1";
-  const qrCodes = await listQrCodes({ includeArchived: showArchived });
-  const visibleQrCodes = showArchived ? qrCodes : qrCodes.filter((qr) => qr.status !== "archived");
+  const rawParams = await searchParams;
+  const filters = parseQrListSearchParams(rawParams);
+  const hasActiveFilters = Object.keys(filters).some((key) => key !== "page");
+
+  const [{ items, totalCount, page, pageCount }, folders] = await Promise.all([
+    listQrCodesPage(filters),
+    listMyFolders(),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -28,46 +37,49 @@ export default async function QrCodesListPage({ searchParams }: QrCodesListPageP
       />
 
       <div className="flex flex-col gap-4 px-4 pb-6 sm:px-6">
-        <div className="flex justify-end">
-          <Link
-            href={showArchived ? "/dashboard/qr-codes" : "/dashboard/qr-codes?archived=1"}
-            className="text-sm text-primary hover:underline"
-          >
-            {showArchived ? "Hide archived" : "Show archived"}
-          </Link>
-        </div>
+        <QRCodesFilterBar folders={folders} />
 
-        {visibleQrCodes.length === 0 ? (
+        {totalCount === 0 && !hasActiveFilters ? (
           <EmptyState
-            title={showArchived ? "No archived QR codes" : "No QR codes yet"}
-            description={
-              showArchived
-                ? "QR codes you archive will show up here."
-                : "Create your first QR code to see it here."
-            }
+            title="No QR codes yet"
+            description="Create your first QR code to see it here."
             action={
-              showArchived ? undefined : (
-                <Link
-                  href="/dashboard/qr-codes/new"
-                  className={buttonVariants({ className: "mt-2" })}
-                >
-                  Create QR Code
-                </Link>
-              )
+              <Link
+                href="/dashboard/qr-codes/new"
+                className={buttonVariants({ className: "mt-2" })}
+              >
+                Create QR Code
+              </Link>
+            }
+          />
+        ) : items.length === 0 ? (
+          <EmptyState
+            title="No matching QR codes"
+            description="Try a different search term, or clear your filters."
+            action={
+              <Link
+                href="/dashboard/qr-codes"
+                className="mt-2 text-sm text-primary hover:underline"
+              >
+                Clear filters
+              </Link>
             }
           />
         ) : (
           <>
             <div className="hidden overflow-x-auto md:block">
-              <QRCodeTable qrCodes={visibleQrCodes} />
+              <QRCodeTable qrCodes={items} folders={folders} />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">
-              {visibleQrCodes.map((qrCode) => (
-                <QRCodeCard key={qrCode.id} qrCode={qrCode} />
+              {items.map((qrCode) => (
+                <QRCodeCard key={qrCode.id} qrCode={qrCode} folders={folders} />
               ))}
             </div>
+            <Pagination page={page} pageCount={pageCount} totalCount={totalCount} />
           </>
         )}
+
+        <FolderManager folders={folders} />
       </div>
     </div>
   );

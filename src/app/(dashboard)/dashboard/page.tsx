@@ -3,15 +3,22 @@ import { AnalyticsSummaryCards } from "@/components/analytics/AnalyticsSummaryCa
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { QRCodeCard } from "@/components/dashboard/QRCodeCard";
 import { buttonVariants } from "@/components/ui/Button";
-import { listQrCodes } from "@/lib/qr/queries";
+import { getMyQrCodeStats, listQrCodesPage } from "@/lib/qr/queries";
 
+const RECENT_COUNT = 3;
+
+/**
+ * Real database queries throughout (Module 3.10) — `get_my_qr_code_stats`
+ * for the aggregate cards, a 3-row `listQrCodesPage` call for "Recent",
+ * neither ever fetches the user's full QR list just to derive a few
+ * numbers or the newest handful of rows.
+ */
 export default async function DashboardOverviewPage() {
-  const qrCodes = await listQrCodes();
-
-  const totalQrCodes = qrCodes.length;
-  const dynamicQrCodes = qrCodes.filter((qr) => qr.mode === "dynamic").length;
-  const totalScans = qrCodes.reduce((sum, qr) => sum + qr.scanCount, 0);
-  const recent = [...qrCodes].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, 3);
+  const [stats, recentPage] = await Promise.all([
+    getMyQrCodeStats(),
+    listQrCodesPage({ pageSize: RECENT_COUNT, sortBy: "updated_at", sortDirection: "desc" }),
+  ]);
+  const recent = recentPage.items;
 
   return (
     <div className="flex flex-col gap-6">
@@ -27,9 +34,9 @@ export default async function DashboardOverviewPage() {
       <div className="flex flex-col gap-6 px-4 pb-6 sm:px-6">
         <AnalyticsSummaryCards
           cards={[
-            { label: "Total QR Codes", value: String(totalQrCodes) },
-            { label: "Dynamic QR Codes", value: String(dynamicQrCodes) },
-            { label: "Total Scans", value: totalScans.toLocaleString() },
+            { label: "Total QR Codes", value: String(stats.totalCount) },
+            { label: "Dynamic QR Codes", value: String(stats.dynamicCount) },
+            { label: "Total Scans", value: stats.totalScans.toLocaleString() },
             { label: "Scans This Period", value: "—" },
           ]}
         />

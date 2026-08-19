@@ -888,3 +888,32 @@ Known issues:
 Next:
 
 - Module 3.10 — Dashboard Search, Filters, and Organization
+
+## Module 3.10 — Dashboard Search, Filters, and Organization
+
+Status: COMPLETE
+
+Completed:
+
+- **Real database queries, replacing two client-side-filtering anti-patterns**: `listQrCodesPage()` (`src/lib/qr/queries.ts`) pushes search (`ilike`, wildcard-escaped)/type/mode/status/folder filters, sort, and `.range()` pagination into the query itself, with Postgres's own `count: "exact"` for the total — never `array.length` after fetching everything. `/dashboard` (Overview) had the same anti-pattern (fetching every QR code just to `.length`/`.filter()`/`.reduce()`/sort-and-slice in JS) and is fixed in the same pass via a new `get_my_qr_code_stats()` RPC (plain SQL, not `SECURITY DEFINER` — RLS scopes it to the caller automatically) plus a 3-row `listQrCodesPage()` call for "Recent."
+- New migration `20260820100000_add_qr_search_and_stats.sql`: enables `pg_trgm`, adds a GIN trigram index on `qr_codes.name` (real substring search at scale), one composite `(user_id, status, updated_at desc)` index covering the default list-view shape (deeper index tuning is Module 3.13's own audit, left there on purpose), and the stats RPC.
+- **URL-driven filter bar** (`QRCodesFilterBar`): search (debounced 300ms)/type/mode/status/folder/sort all write straight to the page's own URL search params via `router.push()` — no separate client state, bookmarkable as a side effect. `parseQrListSearchParams()` (`src/lib/qr/list-filters.ts`) validates every raw param, silently dropping anything unrecognized rather than erroring the page.
+- **Two distinct, correct empty states**: "you've never created a QR code" (true empty, with a Create CTA) vs. "your filters match nothing" (no-results, with a Clear-filters link) — the master prompt's own explicit requirement, live-verified as genuinely different states.
+- **Pagination** (`Pagination`): plain `<Link>`s to `?page=N`, renders nothing at all for a single page.
+- **Folders, deliberately minimal**: `qr_folders`/`qr_codes.folder_id` (schema+RLS since Module 1.4/1.5, unused until now) get real create/delete (no rename — a light organizational aid, not a file-manager) via `src/lib/folders/{queries,actions}.ts`, a folder filter, and a per-row `QRCodeFolderSelect`. Deleting a folder relies on the existing `ON DELETE SET NULL` — QR codes in it become unfiled, never deleted.
+
+Verification:
+
+- New tests (37): `queries.test.ts` (+13), `list-filters.test.ts` (11), `folders/queries.test.ts`, `folders/actions.test.ts`, `QRCodesFilterBar.test.tsx`, `Pagination.test.tsx`, `FolderManager.test.tsx`, `QRCodeFolderSelect.test.tsx`; 2 existing test files updated for the new `folderId` field. A real `userEvent` + `vi.useFakeTimers()` hang was found and fixed in the filter-bar debounce tests (switched to `fireEvent` + real-timer `waitFor`) — the hang was silently poisoning every later test in the same file since the fake-timer cleanup never ran after the hang.
+- `npm run typecheck` / `npx eslint .` (0 errors, same 11 pre-existing warnings) / `npx prettier --check .` — pass.
+- `npx vitest run` — **442/442 passing** across 68 files.
+- `rm -rf .next && npm run build` — pass, all routes build.
+- **Live verification against the real Supabase project**: migration pushed (`pg_trgm`, both indexes, and the non-`SECURITY DEFINER` stats RPC all confirmed). Seeded 6 real QR codes; search (including literal-`%`-in-name escaping), type/mode/status filters, sort, 2-page pagination, and the full folder create→assign→delete-leaves-QR-unfiled lifecycle all verified correct through the real `listQrCodesPage`/folder actions _and_ through direct navigation to filtered `/dashboard/qr-codes` URLs (server-rendered output matched). RLS on the new stats RPC confirmed via a genuinely anonymous `curl` call returning all-zero stats, not the real signed-in user's numbers. All test data, the throwaway account, and the temp route cleaned up; `mailer_autoconfirm` restored to `false`. Final state: exactly one `auth.users` row (the permanent account, confirmed untouched) and zero `qr_codes`/`qr_folders` rows anywhere. Full detail in `docs/ARCHITECTURE.md`.
+
+Known issues:
+
+- None blocking. Folder rename isn't supported (create/delete only) — deliberate scope decision. See `docs/ARCHITECTURE.md`'s "Known issues" under Module 3.10 for the one other minor, explicitly-scoped item (large-dataset pagination proven via the query layer + component tests, not 20+ real seeded rows).
+
+Next:
+
+- Module 3.11 — QR Status, Duplicate, Archive, and Safe Delete

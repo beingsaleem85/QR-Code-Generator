@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { QRCodeRowActions } from "@/components/dashboard/QRCodeRowActions";
 import { QRCodeStatusBadge } from "@/components/dashboard/QRCodeStatusBadge";
+import { QRCodeFolderSelect } from "@/components/dashboard/QRCodeFolderSelect";
 import { Card } from "@/components/ui/Card";
 import type { QrCodeRecord } from "@/lib/qr/records";
+import type { QrFolder } from "@/types/folder";
 
 interface QRCodeCardProps {
   qrCode: QrCodeRecord;
+  folders?: QrFolder[];
 }
 
 /**
@@ -14,7 +17,7 @@ interface QRCodeCardProps {
  * `<dialog>` now (Module 3.5), and interactive elements can't nest inside
  * an `<a>`. Only the name links to the detail page, matching `QRCodeTable`.
  */
-export function QRCodeCard({ qrCode }: QRCodeCardProps) {
+export function QRCodeCard({ qrCode, folders = [] }: QRCodeCardProps) {
   return (
     <Card className="flex flex-col gap-2 p-4">
       <div className="flex items-start justify-between gap-2">
@@ -29,6 +32,9 @@ export function QRCodeCard({ qrCode }: QRCodeCardProps) {
       <p className="text-xs text-muted-foreground">
         {qrCode.qrType} &middot; {qrCode.mode} &middot; {qrCode.scanCount} scans
       </p>
+      {folders.length > 0 ? (
+        <QRCodeFolderSelect qrCodeId={qrCode.id} folderId={qrCode.folderId} folders={folders} />
+      ) : null}
       <QRCodeRowActions qrCode={qrCode} />
     </Card>
   );

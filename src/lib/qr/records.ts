@@ -41,6 +41,7 @@ export interface QrCodeRecord {
   payloadData: Record<string, unknown>;
   designConfig: DesignConfig;
   destinationUrl: string | null;
+  folderId: string | null;
   scanCount: number;
   createdAt: string;
   updatedAt: string;
@@ -57,6 +58,7 @@ export function toQrCodeRecord(row: QrCodeDbRow): QrCodeRecord {
     payloadData: row.payload_data,
     designConfig: row.design_config as unknown as DesignConfig,
     destinationUrl: row.destination_url,
+    folderId: row.folder_id,
     scanCount: row.scan_count_cached,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

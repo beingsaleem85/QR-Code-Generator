@@ -7,8 +7,11 @@ function createChain(result: { data?: unknown; error?: unknown; count?: number }
     eq: vi.fn(() => chain),
     neq: vi.fn(() => chain),
     gte: vi.fn(() => chain),
+    ilike: vi.fn(() => chain),
+    is: vi.fn(() => chain),
     order: vi.fn(() => chain),
     limit: vi.fn(() => chain),
+    range: vi.fn(() => chain),
     maybeSingle: vi.fn(() => Promise.resolve(result)),
     then: (resolve: (value: typeof result) => void) => resolve(result),
   };
@@ -224,5 +227,142 @@ describe("listQrFeedback", () => {
     const { listQrFeedback } = await loadQueries(chain);
 
     await expect(listQrFeedback("qr-1")).rejects.toThrow("connection failed");
+  });
+});
+
+describe("listQrCodesPage", () => {
+  it("returns the mapped items plus pagination metadata", async () => {
+    const chain = createChain({ data: [ROW], error: null, count: 1 });
+    const { listQrCodesPage } = await loadQueries(chain);
+
+    const result = await listQrCodesPage();
+
+    expect(result).toEqual({
+      items: [expect.objectContaining({ id: "qr-1" })],
+      totalCount: 1,
+      page: 1,
+      pageSize: 20,
+      pageCount: 1,
+    });
+  });
+
+  it("excludes archived rows by default, includes them when status=archived is requested", async () => {
+    const excludeChain = createChain({ data: [], error: null, count: 0 });
+    const { listQrCodesPage: list1 } = await loadQueries(excludeChain);
+    await list1();
+    expect(excludeChain.neq).toHaveBeenCalledWith("status", "archived");
+
+    const includeChain = createChain({ data: [], error: null, count: 0 });
+    const { listQrCodesPage: list2 } = await loadQueries(includeChain);
+    await list2({ status: "archived" });
+    expect(includeChain.eq).toHaveBeenCalledWith("status", "archived");
+  });
+
+  it("applies search as an escaped ilike pattern on name", async () => {
+    const chain = createChain({ data: [], error: null, count: 0 });
+    const { listQrCodesPage } = await loadQueries(chain);
+
+    await listQrCodesPage({ search: "50% off_deal" });
+
+    expect(chain.ilike).toHaveBeenCalledWith("name", "%50\\% off\\_deal%");
+  });
+
+  it("applies type and mode filters", async () => {
+    const chain = createChain({ data: [], error: null, count: 0 });
+    const { listQrCodesPage } = await loadQueries(chain);
+
+    await listQrCodesPage({ qrType: "pdf", mode: "dynamic" });
+
+    expect(chain.eq).toHaveBeenCalledWith("qr_type", "pdf");
+    expect(chain.eq).toHaveBeenCalledWith("mode", "dynamic");
+  });
+
+  it("filters unfiled QR codes via folderId: 'unfiled'", async () => {
+    const chain = createChain({ data: [], error: null, count: 0 });
+    const { listQrCodesPage } = await loadQueries(chain);
+
+    await listQrCodesPage({ folderId: "unfiled" });
+
+    expect(chain.is).toHaveBeenCalledWith("folder_id", null);
+  });
+
+  it("filters to a specific folder id", async () => {
+    const chain = createChain({ data: [], error: null, count: 0 });
+    const { listQrCodesPage } = await loadQueries(chain);
+
+    await listQrCodesPage({ folderId: "folder-1" });
+
+    expect(chain.eq).toHaveBeenCalledWith("folder_id", "folder-1");
+  });
+
+  it("sorts by the requested field and direction", async () => {
+    const chain = createChain({ data: [], error: null, count: 0 });
+    const { listQrCodesPage } = await loadQueries(chain);
+
+    await listQrCodesPage({ sortBy: "name", sortDirection: "asc" });
+
+    expect(chain.order).toHaveBeenCalledWith("name", { ascending: true });
+  });
+
+  it("paginates via range, computed from page and pageSize", async () => {
+    const chain = createChain({ data: [], error: null, count: 45 });
+    const { listQrCodesPage } = await loadQueries(chain);
+
+    const result = await listQrCodesPage({ page: 2, pageSize: 10 });
+
+    expect(chain.range).toHaveBeenCalledWith(10, 19);
+    expect(result.pageCount).toBe(5);
+  });
+
+  it("clamps pageSize to a sane maximum", async () => {
+    const chain = createChain({ data: [], error: null, count: 0 });
+    const { listQrCodesPage } = await loadQueries(chain);
+
+    await listQrCodesPage({ pageSize: 10_000 });
+
+    expect(chain.range).toHaveBeenCalledWith(0, 99);
+  });
+
+  it("throws on a real database error", async () => {
+    const chain = createChain({ data: null, error: { message: "connection failed" } });
+    const { listQrCodesPage } = await loadQueries(chain);
+
+    await expect(listQrCodesPage()).rejects.toThrow("connection failed");
+  });
+});
+
+describe("getMyQrCodeStats", () => {
+  async function loadWithRpc(result: { data?: unknown; error?: unknown }) {
+    const { createClient } = await import("@/lib/supabase/server");
+    const rpc = vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve(result)) }));
+    vi.mocked(createClient).mockResolvedValue({ rpc } as never);
+    return { ...(await import("@/lib/qr/queries")), rpc };
+  }
+
+  it("maps the aggregate RPC row to camelCase", async () => {
+    const { getMyQrCodeStats, rpc } = await loadWithRpc({
+      data: { total_count: 5, dynamic_count: 2, total_scans: 137 },
+      error: null,
+    });
+
+    const stats = await getMyQrCodeStats();
+
+    expect(stats).toEqual({ totalCount: 5, dynamicCount: 2, totalScans: 137 });
+    expect(rpc).toHaveBeenCalledWith("get_my_qr_code_stats");
+  });
+
+  it("defaults to zeros when no row is returned", async () => {
+    const { getMyQrCodeStats } = await loadWithRpc({ data: null, error: null });
+
+    expect(await getMyQrCodeStats()).toEqual({ totalCount: 0, dynamicCount: 0, totalScans: 0 });
+  });
+
+  it("throws on a real database error", async () => {
+    const { getMyQrCodeStats } = await loadWithRpc({
+      data: null,
+      error: { message: "connection failed" },
+    });
+
+    await expect(getMyQrCodeStats()).rejects.toThrow("connection failed");
   });
 });

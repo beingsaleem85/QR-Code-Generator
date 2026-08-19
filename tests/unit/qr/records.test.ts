@@ -43,6 +43,7 @@ describe("toQrCodeRecord (DB row -> app-layer serialization)", () => {
       payloadData: { url: "https://example.com" },
       designConfig: DEFAULT_DESIGN_CONFIG,
       destinationUrl: null,
+      folderId: null,
       scanCount: 0,
       createdAt: "2026-08-01T00:00:00.000Z",
       updatedAt: "2026-08-02T00:00:00.000Z",
