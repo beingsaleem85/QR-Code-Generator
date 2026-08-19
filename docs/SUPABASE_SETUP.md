@@ -21,7 +21,7 @@ This creates `supabase/.temp/` (gitignored) holding the link state. No secret is
 npx supabase db push --linked
 ```
 
-`supabase/migrations/` contains 17 migrations, applied in filename (timestamp) order — never reorder or renumber an existing one; add new changes as new, forward-only migration files. Every migration in this project has already been applied to and verified against a real project during development; running `db push` against a fresh project applies the full, current schema in one pass.
+`supabase/migrations/` contains 18 migrations, applied in filename (timestamp) order — never reorder or renumber an existing one; add new changes as new, forward-only migration files. Every migration in this project has already been applied to and verified against a real project during development; running `db push` against a fresh project applies the full, current schema in one pass.
 
 For local iteration before pushing live, `supabase start` (requires Docker) + `supabase db reset` re-applies every migration plus `supabase/seed.sql` (non-sensitive development data only) against a disposable local Postgres instance.
 

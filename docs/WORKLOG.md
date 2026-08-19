@@ -1070,7 +1070,7 @@ Completed:
 - **Built and live-verified all 6 named E2E journeys** (A: Anonymous Static QR, B: Account Creation, C: Dynamic QR, D: Analytics, E: Authorization, F: File QR) against the real live Supabase project, using the established throwaway-account (`mailer_autoconfirm` toggle) technique. 12/12 passing (6 journeys × 2 working browser projects).
 - **Found and fixed a real production bug via Journey A**: Module 3.12's CSP `img-src` directive never included `blob:`, only `data:`/`https:` — silently CSP-blocking every PNG download in production since that module shipped, because Module 3.12's own live verification only checked page loads, never clicked the download button. Fixed with one token in `next.config.ts`; re-verified live in both a dev and a real production server.
 - **Firefox couldn't be launched** in this sandboxed environment (`spawn UNKNOWN`, confirmed not a sandbox-permission issue) — the `firefox-desktop` project stays correctly configured for a normal CI/local run; Chromium desktop + mobile-emulated fully exercise every journey, matching the master prompt's own "if available" wording for the second engine.
-- **Full cleanup**: 35 throwaway test accounts deleted (`DELETE FROM auth.users WHERE email LIKE 'e2e-%@example.com'`, cascades everything else); `mailer_autoconfirm` restored to `false` and confirmed. 5 small orphaned PDF blobs remain in Storage (a direct-SQL delete was rejected by Supabase's own protection trigger; fixing it properly would need signing in as 5 different throwaway owners for 5 dummy fixtures — accepted as a harmless, documented trade-off, consistent with this project's existing Module 3.8 orphan precedent, and specifically not a reason to introduce the service-role key).
+- **Full cleanup**: 35 throwaway test accounts deleted (`DELETE FROM auth.users WHERE email LIKE 'e2e-%@example.com'`, cascades everything else); `mailer_autoconfirm` restored to `false` and confirmed. 5 small orphaned PDF blobs from this module's own fixtures remain in Storage — bringing `qr-documents`' real total to 6 counting the pre-existing Module 3.8 orphan (this module counted only its own 5, not the bucket as a whole; corrected during the Module 3.17 pre-deployment review). A direct-SQL delete was rejected by Supabase's own protection trigger; fixing it properly would need signing in as 5 different throwaway owners for 5 dummy fixtures — accepted as a harmless, documented trade-off, consistent with this project's existing Module 3.8 orphan precedent, and specifically not a reason to introduce the service-role key.
 
 Verification:
 
@@ -1085,7 +1085,7 @@ Known issues:
 
 - Firefox cannot launch in this specific sandboxed environment — an environment gap, not a code defect; the Playwright project is still correctly configured.
 - E2E Journeys B-F require `mailer_autoconfirm=true` on the live project to run (no dedicated disposable test Supabase project exists) — running without it fails fast with a clear error, not a silent hang.
-- 5 small orphaned PDF blobs remain in the `qr-documents` bucket — harmless, isolated per-owner paths, consistent with existing accepted-orphan precedent.
+- 5 small orphaned PDF blobs from this module remain in the `qr-documents` bucket (6 total counting the pre-existing Module 3.8 one — see the Module 3.17 pre-deployment review) — harmless, isolated per-owner paths, consistent with existing accepted-orphan precedent.
 
 Next:
 
@@ -1097,7 +1097,7 @@ Status: COMPLETE
 
 Completed:
 
-- **Final Checks**: re-ran production build/TypeScript/lint/unit tests fresh as this module's own gate (all pass identically to Module 3.16's numbers). Re-ran E2E Journey A only (no backend dependency) rather than the full B-F live-Supabase suite again, since Module 3.16 already comprehensively live-verified every journey. New audits this module: **dependency audit** (`npm audit`, 0 vulnerabilities), **secret scan** (grepped every tracked file, 2 hits, both false positives — the word "service_role" in prose, not a real value; confirmed `.env.local` is untracked and gitignored), **route audit** (every route cross-checked against `proxy.ts`/`robots.ts`, only remaining stub is the deliberate `/pricing` placeholder), **broken-link audit** (every internal link across `src/` resolves to a real route, zero broken), **responsive UI audit** (satisfied by Module 3.16's `chromium-mobile` E2E coverage, already real interactive testing on a mobile viewport), **accessibility audit** (every `<img>` has real `alt` text, no unlabeled icon-only buttons found, every E2E test already relies on `getByRole`/`getByLabel` working — indirect but real evidence of accessible markup throughout), **RLS/security audit** (re-read every policy across all 17 migrations, confirmed all 8 `SECURITY DEFINER` functions set `search_path` explicitly — no drift from documentation found), **storage policy audit** (re-confirmed `qr_asset_is_publicly_readable()`'s scoping is still exactly as narrow as documented).
+- **Final Checks**: re-ran production build/TypeScript/lint/unit tests fresh as this module's own gate (all pass identically to Module 3.16's numbers). Re-ran E2E Journey A only (no backend dependency) rather than the full B-F live-Supabase suite again, since Module 3.16 already comprehensively live-verified every journey. New audits this module: **dependency audit** (`npm audit`, 0 vulnerabilities), **secret scan** (grepped every tracked file, 2 hits, both false positives — the word "service_role" in prose, not a real value; confirmed `.env.local` is untracked and gitignored), **route audit** (every route cross-checked against `proxy.ts`/`robots.ts`, only remaining stub is the deliberate `/pricing` placeholder), **broken-link audit** (every internal link across `src/` resolves to a real route, zero broken), **responsive UI audit** (satisfied by Module 3.16's `chromium-mobile` E2E coverage, already real interactive testing on a mobile viewport), **accessibility audit** (every `<img>` has real `alt` text, no unlabeled icon-only buttons found, every E2E test already relies on `getByRole`/`getByLabel` working — indirect but real evidence of accessible markup throughout), **RLS/security audit** (re-read every policy across all 18 migrations, confirmed all 8 `SECURITY DEFINER` functions set `search_path` explicitly — no drift from documentation found), **storage policy audit** (re-confirmed `qr_asset_is_publicly_readable()`'s scoping is still exactly as narrow as documented).
 - **Final Documentation**: fully rewrote `README.md` (was still a Phase-1 scaffold claiming Supabase wasn't connected). Added three new files: `docs/SUPABASE_SETUP.md` (link/configure a fresh project, migrations, buckets, Auth config, every env var's source), `docs/DEPLOYMENT.md` (production env vars, domain/redirect-URL config, a real pre-launch checklist), `docs/SECURITY.md` (a consolidated synthesis of the RLS/no-service-role-key/rate-limiting/CSP posture, including a full per-table RLS reference).
 - **Final Report**: produced `docs/FINAL_REPORT.md` — the master prompt's required 10-section report (Product Summary, Architecture, Completed QR Types [18/20 real, stated plainly], Database, Storage, Analytics, Testing, Known Limitations, Required Production Configuration, Future Enhancements), as a standalone document cross-linking into the other docs rather than duplicating them.
 - **Fixed a stray leftover "Next:" pointer** found in this file at the end of Module 3.16's entry (an artifact of an earlier append during this session) — it incorrectly pointed back at "Module 3.14"; corrected here.
@@ -1117,3 +1117,25 @@ Known issues:
 - See `docs/FINAL_REPORT.md`'s "Known Limitations" section for the consolidated, deduplicated list of every real, deliberate gap across the whole build.
 
 This is the final module of the master build prompt's numbered chain (3.1-3.17). No further module follows.
+
+## Pre-Deployment Review (post-3.17)
+
+Status: COMPLETE
+
+Completed:
+
+- Independently re-verified `docs/FINAL_REPORT.md` against the live codebase and live Supabase project — not trusting prior modules' own completion claims. Re-ran the full local gate (typecheck/lint/format/audit/474 unit tests/build) fresh, scanned the compiled `.next` build output directly for any secret-key reference (none), re-derived RLS policy shape directly from all 18 migrations (matches `docs/SECURITY.md`), confirmed RLS is actually enforced live (both `pg_class.relrowsecurity` and a raw anonymous `curl` against `qr_codes`/`rate_limit_buckets`), confirmed the permanent Lifetime Pro entitlement live (`plan='pro'`, `is_lifetime=true`, `dynamic_qr_limit=null`), and re-ran the full 6-journey × 2-project E2E suite fresh against the current commit (12/12 passing) — followed by full cleanup and restoring `mailer_autoconfirm` to `false`.
+- **Found and fixed two real documentation discrepancies**: the migration count was wrong everywhere it appeared (said 17, actually 18 — 5 locations fixed); the orphaned-Storage-blob count was undercounted and was never going to stay accurate as a stated fixed number (Module 3.16 said "5," never accounting for a pre-existing Module 3.8 orphan in the same bucket, and this review's own E2E re-run added 2 more) — rewrote every affected doc to describe the real, growing pattern instead of a number that goes stale on every future E2E run.
+- **Surfaced a new, real finding**: every live E2E run leaves `qr-documents` slightly larger with no automated way to shrink it back (deleting a throwaway account cascades its DB rows but not its Storage object, and this project's zero-service-role-key policy blocks a privileged cleanup path). Harmless today, but a genuine gap worth a real fix before repeated/CI use — recorded in `docs/FINAL_REPORT.md`'s Known Limitations.
+
+Verification:
+
+- `npm run typecheck` / `npx eslint .` (0 errors, same 11 pre-existing warnings) / `npx prettier --check .` / `npm audit` (0 vulnerabilities) — pass.
+- `npx vitest run` — **474/474 passing** across 70 files.
+- `npx playwright test --project=chromium-desktop --project=chromium-mobile` — **12/12 passing**, fresh against the current commit.
+- `rm -rf .next && npm run build` — pass.
+- **Live verification against the real Supabase project and a real production server**: RLS enforcement, entitlement, security headers, and test-data cleanliness all confirmed directly, not assumed. Full detail in `docs/ARCHITECTURE.md`'s "Pre-Deployment Review" section.
+
+Known issues:
+
+- The growing Storage-orphan pattern — real, low-priority, not a deploy-blocker.
