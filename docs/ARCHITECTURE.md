@@ -1283,3 +1283,66 @@ The delete `<dialog>`'s copy always said "This permanently deletes the QR code a
 ### Known issues
 
 - None blocking. The 410 ("paused/archived") variant of the new `/r/[slug]` unavailable page was verified via unit test (mocked resolution → correct HTML/status) rather than a second live round-trip against a real paused QR — the resolution logic itself (`resolveDynamicQrRedirect`) is unchanged and was already thoroughly live-verified in Module 3.6; only the response _rendering_ changed, and that's the same `renderUnavailablePage()` function already proven live for the 404 case.
+
+## Security Hardening (Module 3.12)
+
+### Approach: audit against the master prompt's own checklist, fix what's genuinely missing
+
+Most of the master prompt's §3.12 checklist was already true by construction from prior modules — RLS on every table, session-derived `user_id` everywhere (never client-supplied), `isSafeRedirectTarget` for every stored URL, per-bucket MIME/size enforcement, XML-escaped user text in the one place it's interpolated into SVG (`escapeXml()` on `frame.ctaText`, Module 3.3). This module's real work was (a) confirming that with a systematic pass rather than assuming, and (b) building the two things that genuinely didn't exist yet: rate limiting and security headers.
+
+### Text length limits: one real gap found and fixed
+
+Every QR-type content schema already bounds its own free-text fields (`z.string().max(...)` throughout `src/lib/validation/qr/*.ts`) — confirmed via a full scan, not spot-checked. The one gap: a QR's own `name` and a folder's own `name` had no length limit anywhere, client or server. Fixed with `MAX_QR_NAME_LENGTH`/`MAX_FOLDER_NAME_LENGTH` (120/80, matching the "title" field convention already used across Module 3.9's schemas) — enforced server-side in `validateSaveInput`/`createFolder` and mirrored as an HTML `maxLength` for immediate client feedback. Both constants live outside their respective `"use server"` action files (`src/lib/qr/action-types.ts`, `src/types/folder.ts`) for the same reason `AUTH_REQUIRED` does — a `"use server"` file may only export async functions. The four Storage-backed schemas' `path`/`fileName`/`mimeType` fields (previously unbounded, though always system- or browser-derived, never a large attack surface) also got sensible caps (`.max(500)`/`.max(255)`/`.max(100)`) as cheap defense-in-depth.
+
+### Safe rendering audit: no untrusted HTML found
+
+Both `dangerouslySetInnerHTML` call sites in the app (`QRPreviewPanel`, the QR detail page) render this app's own generated QR SVG markup — never raw user input. The one place user-controlled text is interpolated directly into SVG XML (`frame.ctaText`, rendered as an SVG `<text>` element) already passes through `escapeXml()` (Module 3.3) before interpolation — confirmed by reading the actual `styled-svg.ts` code, not assumed. Logos (Module 2.4/2.9-era) are rasterized client-side via `<canvas>` into a flat PNG data URL before ever being stored — even an SVG logo with embedded `<script>` content can never reach a rendered page as raw markup, since canvas-drawn SVG images have scripting disabled by the browser's own image-loading pipeline and the stored artifact is always a PNG, never the original file. (The `qr-logos` Storage bucket provisioned in Module 1.5 is, as a result, entirely unused by any application code — noted for Module 3.17's storage-policy audit, not a bug.)
+
+### Rate limiting: a small, durable, Postgres-backed limiter
+
+No rate limiting existed anywhere before this module. The master prompt names five abuse surfaces; this app's actual exposure breaks down as:
+
+- **Dynamic redirect abuse** and **scan-event floods** — the same request (`/r/[slug]`), so one limiter covers both.
+- **Anonymous feedback spam** (`submit_qr_feedback`) — the other genuinely anonymous write path in this app.
+- **Signup/login abuse** — already covered by Supabase Auth's own built-in rate limits (this project hit its real email-send limit organically during earlier live verification — see `docs/SESSION_HANDOFF.md`), not duplicated here.
+- **Unauthenticated generation abuse** — the static QR generator does all its work client-side (no server call at all for a static QR preview/download), so there's no server endpoint to flood in the first place.
+- **File upload abuse** — already behind authentication (a real account) plus per-bucket MIME/size limits; a per-user upload-frequency limiter is a documented follow-up, not built here (see Known issues).
+
+`check_rate_limit(key, max_per_window, window_seconds)` (new migration `20260821090000_add_rate_limiting.sql`) is a `SECURITY DEFINER` fixed-window counter over a new `rate_limit_buckets` table — same "narrow privileged RPC, not a client-facing policy" pattern as every other privileged operation in this project. The table has RLS enabled with **zero policies for any role**, so the only access path is the RPC itself; live-verified that a direct anonymous `select` against it returns an empty array. Postgres-backed rather than in-memory deliberately: this app has no chosen deployment platform yet, and an in-memory counter is silently wrong the instant a serverless/multi-instance environment routes two requests to different instances — the shared database is the one piece of state every deployment target already talks to on every request anyway.
+
+`src/lib/rate-limit.ts` wraps the RPC (`checkRateLimit`) and derives a client IP from `x-forwarded-for`/`x-real-ip` (`readClientIp`, same "whichever edge platform provides it" approach as Module 3.7's country-code header reading) — **fails open** (allows the request) on any error reaching the limiter, since a broken rate limiter must never become a way to take down the redirect or feedback path it's protecting. When no IP header is present at all (local dev, or a platform that sets neither), rate limiting is skipped entirely for that request rather than lumping every such request into one shared bucket, which would be a self-inflicted denial of service.
+
+Wired into `/r/[slug]` (60 requests/60s per IP — generous enough a real visitor never notices, tight enough to blunt a scripted flood; checked _before_ resolving the slug, a deliberate extra-latency trade-off since enforcement has to happen before the redirect decision, not after) and `submitQrFeedback` (5/hour per IP+slug — a real visitor submits once).
+
+**Live-verified the RPC's actual counting logic**, not just its existence: called `check_rate_limit` with `max_per_window=3` five times in a row via a raw anonymous `curl` — got `true, true, true, false, false`, exactly matching a real fixed-window limit of 3. Also confirmed a direct anonymous `select` against `rate_limit_buckets` returns `[]` (RLS blocks it).
+
+### Security headers
+
+`next.config.ts`'s `headers()` now sets a Content-Security-Policy, `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and a conservative `Permissions-Policy` (camera/microphone/geolocation/payment/usb all denied) on every route. The CSP is deliberately pragmatic, not maximal — "CSP where practical" is the master prompt's own wording:
+
+- `script-src`/`style-src` include `'unsafe-inline'` — Next.js App Router injects inline hydration data and this app has a handful of inline `style={{...}}` attributes; a fully nonce-based CSP would remove the need but is a larger, riskier change to verify without a real staging environment (a real follow-up, not skipped silently).
+- `img-src` allows any `https:` origin — Module 3.9's Social QR type lets an owner paste an arbitrary external avatar URL by design; restricting this would break a real, intended feature, not just close an XSS surface.
+- `frame-src`/`media-src`/`connect-src` allow `https://*.supabase.co` (Storage signed URLs, the browser Supabase client's own API calls) plus `youtube.com`/`vimeo.com` for `frame-src` (Module 3.8's video landing pages).
+- `script-src` additionally allows `'unsafe-eval'` **in development only** — found live (see below) that without it, React's dev-mode debugging tooling logs a real, visible console error; React's own documentation is explicit that production builds never call `eval()`, so this never weakens what's actually shipped to users.
+
+**Live-verified, not just configured**: loaded the homepage, the QR generator page (canvas/logo/data-URL heavy), and the login page (mounts the client-side Supabase SDK) against the real dev server and confirmed zero CSP violations in the console on any of them, plus fetched each page's actual response headers to confirm all five headers are present with the expected values. Found and fixed a real issue in the process — the initial CSP produced a genuine `eval() is not supported` console error on every page in dev mode, fixed with the `NODE_ENV`-conditional `'unsafe-eval'` above. Separately started a real `next build && next start` production server and confirmed its CSP response header correctly omits `'unsafe-eval'` — the dev-only carve-out is real, not just claimed in a comment.
+
+### Everything else, confirmed already correct (no change needed)
+
+- **Auth**: every user-owned Server Action derives `user.id` from the authenticated session (`supabase.auth.getUser()`), never from client input — confirmed by re-reading every action file, not assumed.
+- **RLS**: cross-user access has been live-tested repeatedly across prior modules (Module 3.8's PDF cross-user read/write checks, Module 3.9's feedback RLS checks, Module 3.10's stats-RPC anonymous check) — this module didn't re-run those, since nothing touched RLS policies themselves.
+- **Redirect security**: `isSafeRedirectTarget` (dangerous schemes, malformed URLs) is already applied at both input time (per-type Zod schemas) and redirect time (`/r/[slug]`, every landing-page component that renders a stored URL as a link) — confirmed via grep, not assumed.
+- **Upload security**: MIME/extension/size checks already enforced at the Storage bucket level (Module 1.5) plus client-side pre-checks (Module 3.8). "User quotas where appropriate" — the mechanism (`dynamic_qr_limit`) already exists and is real; no product-level free-tier number has been decided yet, which is a deliberate, previously-documented business-scope gap (see the "Dynamic QR Quota" section), not something a security-hardening pass should invent a number for.
+
+### Verification
+
+- New tests (17 net, taking the suite from 451 to 468 across 69 files): `rate-limit.test.ts` (`readClientIp`'s three branches, `checkRateLimit`'s allow/block/fail-open-on-error/fail-open-on-throw), `r-slug-route.test.ts` (+3, 429 response + rate-limit-key-includes-IP + skip-when-no-IP), `feedback-actions.test.ts` (+3, same three shapes for the feedback limiter), `actions.test.ts` (+2, QR name length), `folders/actions.test.ts` (+1, folder name length), `pdf.test.ts` (+1, `fileName` length).
+- `npm run typecheck` / `npx eslint .` (0 errors, same 11 pre-existing warnings) / `npx prettier --check .` — all pass.
+- `npx vitest run` — **468/468 passing** across 69 files.
+- `rm -rf .next && npm run build` — pass, all routes build.
+- **Live verification against the real Supabase project and a real dev/production server** (migration pushed using a `SUPABASE_ACCESS_TOKEN` the user pasted directly in chat, reused from earlier in the same conversation without asking again — no new signup/test-account provisioning was needed this module, since verification here was direct RPC/table checks, not app-driven flows): `rate_limit_buckets`' RLS lockdown and `check_rate_limit`'s actual counting logic confirmed via raw `curl` (see above); CSP/security-headers confirmed via real page loads in both dev and production server modes, including finding and fixing the dev-mode `eval()` issue. All test rows cleaned up (`rate_limit_buckets` confirmed empty afterward); no test auth account was created this module, so nothing needed deleting there.
+
+### Known issues
+
+- None blocking. A per-user file-upload-frequency rate limit was considered and deliberately not built — uploads are already behind authentication and bounded by per-bucket size/MIME limits, and the generic `checkRateLimit` helper is available to add one cheaply later if real abuse is observed.
+- The CSP's `'unsafe-inline'` on `script-src`/`style-src` is a known, documented trade-off (see above) — a nonce-based CSP would close it but is a larger change deferred for now.

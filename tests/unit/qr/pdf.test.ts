@@ -17,6 +17,16 @@ describe("pdfQrSchema", () => {
     expect(pdfQrSchema.safeParse({}).success).toBe(false);
   });
 
+  it("rejects an unreasonably long fileName (Module 3.12)", () => {
+    const result = pdfQrSchema.safeParse({
+      path: "user-1/asset-1/menu.pdf",
+      fileName: "x".repeat(256),
+      sizeBytes: 1,
+      mimeType: "application/pdf",
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("rejects a non-PDF mime type", () => {
     const result = pdfQrSchema.safeParse({
       path: "user-1/asset-1/menu.pdf",

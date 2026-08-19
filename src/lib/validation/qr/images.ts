@@ -7,10 +7,10 @@ import { z } from "zod";
  * populated by the upload flow (`src/lib/qr/asset-upload.ts`).
  */
 const galleryImageSchema = z.object({
-  path: z.string().min(1),
-  fileName: z.string().min(1),
+  path: z.string().min(1).max(500),
+  fileName: z.string().min(1).max(255),
   sizeBytes: z.number().nonnegative(),
-  mimeType: z.string().min(1),
+  mimeType: z.string().min(1).max(100),
   caption: z.string().max(200).optional(),
 });
 

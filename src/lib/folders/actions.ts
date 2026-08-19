@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { AUTH_REQUIRED, type ActionResult } from "@/lib/qr/action-types";
+import { MAX_FOLDER_NAME_LENGTH } from "@/types/folder";
 
 const UNIQUE_VIOLATION = "23505";
 
@@ -21,6 +22,9 @@ function revalidateQrListPaths() {
 export async function createFolder(name: string): Promise<ActionResult<{ id: string }>> {
   const trimmed = name.trim();
   if (!trimmed) return { error: "Give the folder a name." };
+  if (trimmed.length > MAX_FOLDER_NAME_LENGTH) {
+    return { error: `Folder name must be ${MAX_FOLDER_NAME_LENGTH} characters or fewer.` };
+  }
 
   const supabase = await createClient();
   const user = await requireUser(supabase);

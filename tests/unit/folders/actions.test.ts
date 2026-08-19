@@ -59,6 +59,16 @@ describe("createFolder", () => {
     expect(client.from).not.toHaveBeenCalled();
   });
 
+  it("rejects a name over the max length before ever calling the database (Module 3.12)", async () => {
+    const client = mockSupabase({ user: mockUser, fromResult: createChain({}) });
+    const { createFolder } = await loadActions(client);
+
+    const result = await createFolder("x".repeat(81));
+
+    expect(result.error).toMatch(/80 characters/i);
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
   it("creates a folder for the authenticated user", async () => {
     const chain = createChain({ data: { id: "folder-1" }, error: null });
     const client = mockSupabase({ user: mockUser, fromResult: chain });

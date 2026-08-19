@@ -1,6 +1,20 @@
 import { NextResponse, after } from "next/server";
 import { resolveDynamicQrRedirect } from "@/server/services/redirect-resolution";
 import { recordQrScan } from "@/lib/qr/scan-tracking";
+import { checkRateLimit, readClientIp } from "@/lib/rate-limit";
+
+/**
+ * Module 3.12: per-IP redirect-abuse protection — generous enough that a
+ * real visitor rapidly re-scanning/retrying never notices it, tight enough
+ * to blunt a scripted flood. Also the scan-event-flood protection the
+ * master prompt separately names: a scan is recorded on this exact same
+ * request, so limiting requests here limits scan floods for free, no
+ * second mechanism needed. One extra indexed upsert per request is a
+ * real, deliberate latency cost — enforcement has to happen before the
+ * redirect decision, not after — see docs/ARCHITECTURE.md for the
+ * trade-off if Module 3.13's performance audit ever wants to revisit it.
+ */
+const REDIRECT_RATE_LIMIT = { maxPerWindow: 60, windowSeconds: 60 };
 
 /**
  * Module 3.11: a paused/missing dynamic QR must show "a controlled
@@ -58,6 +72,19 @@ function readEdgeCountryCode(headers: Headers): string | null {
 
 export async function GET(request: Request, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params;
+
+  const clientIp = readClientIp(request.headers);
+  if (clientIp) {
+    const allowed = await checkRateLimit(`redirect:${clientIp}`, REDIRECT_RATE_LIMIT);
+    if (!allowed) {
+      return renderUnavailablePage(
+        429,
+        "Too many requests",
+        "This link is being accessed too quickly. Please try again in a moment.",
+      );
+    }
+  }
+
   const resolution = await resolveDynamicQrRedirect(slug);
 
   if (resolution.status === "not_found") {

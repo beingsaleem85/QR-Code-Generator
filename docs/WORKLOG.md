@@ -944,3 +944,30 @@ Known issues:
 Next:
 
 - Module 3.12 — Security Hardening
+
+## Module 3.12 — Security Hardening
+
+Status: COMPLETE
+
+Completed:
+
+- **Audited the master prompt's full checklist first**: Auth, RLS, redirect security, and upload security were all already correct (session-derived `user_id` everywhere, `isSafeRedirectTarget` applied consistently, per-bucket MIME/size enforcement, XML-escaped SVG text interpolation) — confirmed by re-reading the actual code, not assumed. Two genuine gaps found and fixed; two genuinely new systems built.
+- **Text length limits**: a QR's own `name` and a folder's `name` had no length limit anywhere — fixed with `MAX_QR_NAME_LENGTH`/`MAX_FOLDER_NAME_LENGTH` (120/80), enforced server-side and mirrored client-side. The four Storage-backed schemas' `path`/`fileName`/`mimeType` fields got sensible caps too.
+- **Rate limiting, genuinely new**: `check_rate_limit()` RPC (new migration `20260821090000_add_rate_limiting.sql`) — a `SECURITY DEFINER` Postgres fixed-window counter, RLS-locked table with zero policies for any role. Postgres-backed (not in-memory) since this app has no chosen deployment platform yet and an in-memory counter would be silently wrong on a multi-instance host. Wired into `/r/[slug]` (redirect abuse + scan-event floods, same request) and `submitQrFeedback` (anonymous spam) via `src/lib/rate-limit.ts`, keyed by client IP (`x-forwarded-for`/`x-real-ip`), fails open on any error. Signup/login abuse is already covered by Supabase Auth's own built-in limits.
+- **Security headers, genuinely new**: `next.config.ts` now sets a pragmatic CSP (documented trade-offs for `'unsafe-inline'` and open `img-src`, both deliberate) plus `X-Frame-Options`/`X-Content-Type-Options`/`Referrer-Policy`/`Permissions-Policy` on every route.
+
+Verification:
+
+- New tests (17 net): `rate-limit.test.ts`, `r-slug-route.test.ts` (+3), `feedback-actions.test.ts` (+3), `actions.test.ts` (+2), `folders/actions.test.ts` (+1), `pdf.test.ts` (+1).
+- `npm run typecheck` / `npx eslint .` (0 errors, same 11 pre-existing warnings) / `npx prettier --check .` — pass.
+- `npx vitest run` — **468/468 passing** across 69 files.
+- `rm -rf .next && npm run build` — pass, all routes build.
+- **Live verification**: migration pushed; `check_rate_limit`'s real counting logic proven via raw `curl` (5 calls at max=3 → true,true,true,false,false); direct anonymous read of `rate_limit_buckets` confirmed empty (RLS-blocked). CSP verified against a real dev server (found and fixed a genuine `eval()` console error, dev-mode only) and a real production server (confirmed `'unsafe-eval'` correctly absent in prod). No new test account needed this module. Full detail in `docs/ARCHITECTURE.md`.
+
+Known issues:
+
+- None blocking. See `docs/ARCHITECTURE.md`'s "Known issues" under Module 3.12 — per-user upload-frequency limiting and a nonce-based CSP are both documented, deliberate follow-ups, not oversights.
+
+Next:
+
+- Module 3.13 — Performance and Reliability

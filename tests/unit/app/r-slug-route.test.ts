@@ -3,9 +3,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const resolveDynamicQrRedirect = vi.fn();
 const recordQrScan = vi.fn();
 const after = vi.fn((callback: () => unknown) => callback());
+const checkRateLimit = vi.fn<(key: string, config: unknown) => Promise<boolean>>(() =>
+  Promise.resolve(true),
+);
 
 vi.mock("@/server/services/redirect-resolution", () => ({ resolveDynamicQrRedirect }));
 vi.mock("@/lib/qr/scan-tracking", () => ({ recordQrScan }));
+vi.mock("@/lib/rate-limit", () => ({
+  checkRateLimit: (key: string, config: unknown) => checkRateLimit(key, config),
+  readClientIp: (headers: Headers) => headers.get("x-forwarded-for") ?? headers.get("x-real-ip"),
+}));
 vi.mock("next/server", async () => {
   const actual = await vi.importActual<typeof import("next/server")>("next/server");
   return { ...actual, after };
@@ -13,6 +20,7 @@ vi.mock("next/server", async () => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  checkRateLimit.mockResolvedValue(true);
 });
 
 function makeContext(slug: string) {
@@ -131,5 +139,54 @@ describe("GET /r/[slug]", () => {
     await GET(new Request("https://app.example/r/nope"), makeContext("nope"));
 
     expect(recordQrScan).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 with a controlled HTML page when the per-IP rate limit is exceeded, never resolving the slug", async () => {
+    checkRateLimit.mockResolvedValue(false);
+    const { GET } = await import("@/app/r/[slug]/route");
+
+    const response = await GET(
+      new Request("https://app.example/r/abc12345", {
+        headers: { "x-forwarded-for": "203.0.113.5" },
+      }),
+      makeContext("abc12345"),
+    );
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("content-type")).toMatch(/text\/html/);
+    expect(await response.text()).toContain("Too many requests");
+    expect(resolveDynamicQrRedirect).not.toHaveBeenCalled();
+  });
+
+  it("checks the rate limit keyed by client IP when one is present", async () => {
+    resolveDynamicQrRedirect.mockResolvedValue({
+      status: "ok",
+      destinationUrl: "https://example.com",
+    });
+    const { GET } = await import("@/app/r/[slug]/route");
+
+    await GET(
+      new Request("https://app.example/r/abc12345", {
+        headers: { "x-forwarded-for": "203.0.113.5" },
+      }),
+      makeContext("abc12345"),
+    );
+
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      "redirect:203.0.113.5",
+      expect.objectContaining({ maxPerWindow: expect.any(Number) }),
+    );
+  });
+
+  it("skips the rate-limit check entirely when no client IP header is present", async () => {
+    resolveDynamicQrRedirect.mockResolvedValue({
+      status: "ok",
+      destinationUrl: "https://example.com",
+    });
+    const { GET } = await import("@/app/r/[slug]/route");
+
+    await GET(new Request("https://app.example/r/abc12345"), makeContext("abc12345"));
+
+    expect(checkRateLimit).not.toHaveBeenCalled();
   });
 });

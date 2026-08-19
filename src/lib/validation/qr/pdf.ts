@@ -9,8 +9,8 @@ import { z } from "zod";
  * before the QR can be saved.
  */
 export const pdfQrSchema = z.object({
-  path: z.string().min(1, "Upload a PDF file"),
-  fileName: z.string().min(1),
+  path: z.string().min(1, "Upload a PDF file").max(500),
+  fileName: z.string().min(1).max(255),
   sizeBytes: z.number().nonnegative(),
   mimeType: z.literal("application/pdf"),
 });

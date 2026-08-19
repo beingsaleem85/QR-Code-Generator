@@ -81,6 +81,22 @@ describe("saveQrCode", () => {
     expect(result.error).toMatch(/content/i);
   });
 
+  it("rejects a name over the max length before ever touching the database (Module 3.12)", async () => {
+    const { saveQrCode } = await loadActions(mockSupabase({ user: mockUser, fromResults: [] }));
+    const result = await saveQrCode({ ...VALID_INPUT, name: "x".repeat(121) });
+    expect(result.error).toMatch(/120 characters/i);
+  });
+
+  it("accepts a name at exactly the max length", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [{ data: { id: "qr-1" }, error: null }],
+    });
+    const { saveQrCode } = await loadActions(client);
+    const result = await saveQrCode({ ...VALID_INPUT, name: "x".repeat(120) });
+    expect(result.data).toEqual({ id: "qr-1" });
+  });
+
   it("returns AUTH_REQUIRED when there's no session — never inserts, never crashes", async () => {
     const { saveQrCode } = await loadActions(mockSupabase({ user: null, fromResults: [] }));
     const result = await saveQrCode(VALID_INPUT);

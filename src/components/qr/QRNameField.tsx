@@ -2,6 +2,7 @@
 
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
+import { MAX_QR_NAME_LENGTH } from "@/lib/qr/action-types";
 
 interface QRNameFieldProps {
   name: string;
@@ -17,6 +18,7 @@ export function QRNameField({ name, onNameChange }: QRNameFieldProps) {
         value={name}
         onChange={(event) => onNameChange(event.target.value)}
         placeholder="My QR code"
+        maxLength={MAX_QR_NAME_LENGTH}
       />
     </FormField>
   );

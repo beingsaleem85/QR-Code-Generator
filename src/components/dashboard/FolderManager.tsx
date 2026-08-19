@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { createFolder, deleteFolder } from "@/lib/folders/actions";
-import type { QrFolder } from "@/types/folder";
+import { MAX_FOLDER_NAME_LENGTH, type QrFolder } from "@/types/folder";
 
 interface FolderManagerProps {
   folders: QrFolder[];
@@ -96,6 +96,7 @@ export function FolderManager({ folders }: FolderManagerProps) {
           value={name}
           onChange={(event) => setName(event.target.value)}
           aria-label="New folder name"
+          maxLength={MAX_FOLDER_NAME_LENGTH}
         />
         <Button type="submit" variant="secondary" size="sm" disabled={busy || !name.trim()}>
           {busy ? "Adding…" : "Add"}

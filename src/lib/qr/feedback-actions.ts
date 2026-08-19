@@ -1,8 +1,13 @@
 "use server";
 
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { feedbackSubmissionSchema } from "@/lib/validation/qr";
 import type { ActionResult } from "@/lib/qr/action-types";
+import { checkRateLimit, readClientIp } from "@/lib/rate-limit";
+
+/** Module 3.12: much tighter than the redirect limit — a real visitor submits once, not repeatedly. */
+const FEEDBACK_RATE_LIMIT = { maxPerWindow: 5, windowSeconds: 3600 };
 
 /**
  * Public, unauthenticated write path for the feedback landing page — no
@@ -22,6 +27,14 @@ export async function submitQrFeedback(
   const parsed = feedbackSubmissionSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Please check your feedback before submitting." };
+  }
+
+  const clientIp = readClientIp(await headers());
+  if (clientIp) {
+    const allowed = await checkRateLimit(`feedback:${slug}:${clientIp}`, FEEDBACK_RATE_LIMIT);
+    if (!allowed) {
+      return { error: "Please wait before submitting more feedback." };
+    }
   }
 
   const supabase = await createClient();

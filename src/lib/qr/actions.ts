@@ -2,7 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { AUTH_REQUIRED, type ActionResult, type SaveQrCodeInput } from "@/lib/qr/action-types";
+import {
+  AUTH_REQUIRED,
+  MAX_QR_NAME_LENGTH,
+  type ActionResult,
+  type SaveQrCodeInput,
+} from "@/lib/qr/action-types";
 import { buildQrPayload } from "@/lib/qr/render";
 import { generateRandomSlug } from "@/lib/qr/slug";
 import { getEntitlementForUser, resolveDynamicQrAllowance } from "@/lib/account/entitlements";
@@ -29,8 +34,12 @@ async function requireUser(supabase: Awaited<ReturnType<typeof createClient>>) {
 }
 
 function validateSaveInput(input: SaveQrCodeInput): { payload: string } | { error: string } {
-  if (!input.name.trim()) {
+  const trimmedName = input.name.trim();
+  if (!trimmedName) {
     return { error: "Give your QR code a name before saving." };
+  }
+  if (trimmedName.length > MAX_QR_NAME_LENGTH) {
+    return { error: `QR name must be ${MAX_QR_NAME_LENGTH} characters or fewer.` };
   }
   const payload = buildQrPayload(input.qrType, input.content);
   if (!payload) {

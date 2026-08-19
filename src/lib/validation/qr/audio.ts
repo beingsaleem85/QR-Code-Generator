@@ -9,8 +9,8 @@ import { z } from "zod";
  * follow-up if ever needed, not a redesign.
  */
 export const audioQrSchema = z.object({
-  path: z.string().min(1, "Upload an audio file"),
-  fileName: z.string().min(1),
+  path: z.string().min(1, "Upload an audio file").max(500),
+  fileName: z.string().min(1).max(255),
   sizeBytes: z.number().nonnegative(),
   mimeType: z.enum(["audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg"]),
   title: z.string().max(200).optional(),
