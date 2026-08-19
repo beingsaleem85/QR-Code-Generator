@@ -42,13 +42,13 @@ Allowed status: `NOT STARTED`, `IN PROGRESS`, `COMPLETE`, `BLOCKED_EXTERNAL`, `R
 - Area: Error states
 - Original audit line: "Invalid URL | PARTIAL | Not tested | Schema auto-prepends https://, lenient by design"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE (finding documented, no fix made — see below)**. Live-verified on production: attempting to Save with a genuinely invalid URL (e.g. containing spaces) is correctly blocked — "Fix the content errors above before saving." — so no bad data can ever be saved; this part is a real PASS. However, testing also found a genuine, reproducible gap: the field-level inline hint ("Enter a valid http(s) URL") that should appear on blur does not render in the actual compiled production build (confirmed against both `qrforge.space` and a local `next build && next start`), even though the identical scenario passes correctly in isolated and full-shell Vitest/jsdom component tests. This points to a React Compiler interaction with react-hook-form's `watch()`-based state propagation — the same pattern ESLint already flags as "incompatible library" across roughly a dozen content forms in this codebase (Text, Url, Video, Wifi, Event, App, Social, PhoneMessageFields, and others). A real fix would mean changing that shared pattern (e.g. switching to `useFormState`) across many files — a broad, speculative architectural change disproportionate to this one LOW-severity, non-blocking cosmetic gap, and explicitly out of scope per the remediation program's own "no speculative broad rewrites" rule. Documented here for the owner's awareness as a good candidate for a dedicated follow-up investigation, not fixed in this pass. No functional or data-integrity impact — only the early inline hint is missing; the save-time block is fully correct.
 
 ### P-06 — Upload too large / unsupported file type
 - Area: Error states
 - Original audit line: "Upload too large/unsupported | PARTIAL | Not tested | Code-level validation exists"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: uploading a non-PDF file (a plain `.txt`) to the PDF QR type's file input is correctly rejected client-side with `"<filename>" isn't a supported file type.`; the input's `accept="application/pdf"` attribute is also present as a first-line hint. No code change needed.
 
 ### P-07 — Paused Feedback QR blocking submissions
 - Area: K. Feedback QR
@@ -141,7 +141,7 @@ Allowed status: `NOT STARTED`, `IN PROGRESS`, `COMPLETE`, `BLOCKED_EXTERNAL`, `R
 - Area: N. PNG download
 - Original audit line: "Mobile download | PARTIAL | Platform download quirks not exercised"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production at a 375×812 mobile viewport: "Download PNG" triggers a real browser download with the expected `-qr.png` filename pattern. No code change needed.
 
 ### P-22 — Analytics device/browser/OS/country breakdown
 - Area: W. Analytics
@@ -159,7 +159,7 @@ Allowed status: `NOT STARTED`, `IN PROGRESS`, `COMPLETE`, `BLOCKED_EXTERNAL`, `R
 - Area: Y. Responsive/mobile
 - Original audit line: "Tablet-ish viewport | PARTIAL | Only desktop + one mobile size covered"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production at 768×1024 (tablet): homepage, generator, and dashboard QR list all have no horizontal overflow. No code change needed.
 
 ### P-25 — PDF viewer / hosted pages at mobile viewport
 - Area: Y. Responsive/mobile
@@ -171,26 +171,26 @@ Allowed status: `NOT STARTED`, `IN PROGRESS`, `COMPLETE`, `BLOCKED_EXTERNAL`, `R
 - Area: Z. Accessibility/UX
 - Original audit line: "Keyboard navigation | PARTIAL | Not tested"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: Tab moves focus through the generator's real interactive elements, never lost to `<body>` across 8 consecutive tabs; the QR type selector (a `role="option"` button grid) activates correctly via the Enter key. No code change needed.
 
 ### P-27 — Focus states
 - Area: Z. Accessibility/UX
 - Original audit line: "Focus states | PARTIAL | Not tested"
 - Severity: LOW
 - Dependency: paired with P-26 (same testing pass).
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: the Save QR button shows a visible 2px solid focus outline when tabbed to. No code change needed.
 
 ### P-28 — General UI contrast
 - Area: Z. Accessibility/UX
 - Original audit line: "General UI contrast | PARTIAL | Not audited"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: default QR foreground/background are pure black/white; sampled heading text (`rgb(17,24,39)`) on the page background (`rgb(249,250,251)`) is near-black-on-near-white, comfortably exceeding WCAG AA (4.5:1) and AAA (7:1) contrast requirements. No code change needed.
 
 ### P-29 — Mobile touch targets
 - Area: Z. Accessibility/UX
 - Original audit line: "Mobile touch targets | PARTIAL | Not measured"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production at a 375px mobile viewport: the Save QR button measures 285×40px and QR type selector tiles measure ~104×67px. Both comfortably clear the binding WCAG 2.5.8 (AA) 24×24px minimum; the Save button's 40px height is under the optional WCAG 2.5.5 (AAA) 44×44px guideline, worth a minor look but not a compliance failure. No code change needed.
 
 ### P-30 — Reset-password page (post-email-link)
 - Area: A. Public website
@@ -209,25 +209,25 @@ Allowed status: `NOT STARTED`, `IN PROGRESS`, `COMPLETE`, `BLOCKED_EXTERNAL`, `R
 - Area: B. Authentication
 - Original audit line: "Mobile auth UX | PARTIAL | Live (dashboard pages only) | Login/signup forms not independently re-opened at mobile viewport"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production at a 375×812 mobile viewport: `/login` and `/signup` both render with no horizontal overflow; the email field and submit button are appropriately sized. No code change needed.
 
 ### P-33 — Features marketing page
 - Area: A. Public website
 - Original audit line: "Features page | PARTIAL | Not opened this audit"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: real, substantial content (2,619 characters), no internal dev/module language. No code change needed.
 
 ### P-34 — FAQ marketing page
 - Area: A. Public website
 - Original audit line: "FAQ page | PARTIAL | Not opened this audit"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: real content (740 characters), no internal dev/module language. No code change needed.
 
 ### P-35 — Static QR / Dynamic QR marketing pages
 - Area: A. Public website
 - Original audit line: "Static QR / Dynamic QR marketing pages | PARTIAL | Not opened this audit"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: both pages have real content (1,335 and 1,419 characters respectively), no internal dev/module language. No code change needed.
 
 ---
 
