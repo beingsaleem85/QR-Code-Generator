@@ -62,6 +62,7 @@ export async function MenuLandingPage({ payloadData }: MenuLandingPageProps) {
                       src={item.photoUrl}
                       alt={item.name ?? ""}
                       className="h-16 w-16 shrink-0 rounded-lg object-cover"
+                      loading="lazy"
                     />
                   ) : null}
                   <div className="flex flex-1 flex-col gap-0.5">

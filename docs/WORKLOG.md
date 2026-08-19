@@ -971,3 +971,30 @@ Known issues:
 Next:
 
 - Module 3.13 — Performance and Reliability
+
+## Module 3.13 — Performance and Reliability
+
+Status: COMPLETE
+
+Completed:
+
+- **Fixed a real regression from Module 3.12**: the rate-limit check added to `/r/[slug]` cost a second sequential Supabase round trip on every request. New `resolve_qr_redirect_checked()` RPC (migration `20260822090000_combine_redirect_rate_limit.sql`) combines slug resolution and rate-limit enforcement into one round trip — calls the existing `check_rate_limit()` internally, only queries `qr_codes` when under the limit. `resolveDynamicQrRedirect()` and `/r/[slug]/route.ts` updated accordingly; the original `resolve_qr_redirect` function is left unused in the database rather than dropped.
+- **Storage reconciled against `qr_assets` across every bucket in one query** — confirmed exactly one orphan (the same, already-documented Module 3.8 blob), no new leaks from any later module's live verification.
+- **Audited bundle size (~1.5MB total, largest chunk 280KB — small, a consequence of this project's existing anti-dependency-bloat discipline), database indexes (Module 3.10's two remain the only justified ones), unnecessary client components (all 49 spot-checked, each has a genuine reason), and dashboard query count/N+1 patterns (already `Promise.all`-parallelized where it mattered)** — all confirmed already correct, no further changes needed.
+- Added `loading="lazy"` to gallery/menu-item photos (real, zero-config native lazy loading) — the first gallery image stays eager since it's the page's first visible content.
+
+Verification:
+
+- New/updated tests (2 net): `redirect-resolution.test.ts` (+2), `r-slug-route.test.ts` (3 rewritten).
+- `npm run typecheck` / `npx eslint .` (0 errors, same 11 pre-existing warnings) / `npx prettier --check .` — pass.
+- `npx vitest run` — **470/470 passing** across 69 files.
+- `rm -rf .next && npm run build` — pass, all routes build.
+- **Live verification**: migration pushed and confirmed `SECURITY DEFINER`; the combined function's resolve+rate-limit behavior proven with real data (4 calls at max=2: first 2 resolve, next 2 correctly block with the destination never leaked); a real `curl` against `/r/[slug]` confirmed a genuine 307 with all security headers present; the storage-reconciliation query run live. All test data and the throwaway account cleaned up; `mailer_autoconfirm` restored to `false`. Full detail in `docs/ARCHITECTURE.md`.
+
+Known issues:
+
+- None blocking. No further database indexes added — the existing set already matches real query patterns.
+
+Next:
+
+- Module 3.14 — SEO and Public Content

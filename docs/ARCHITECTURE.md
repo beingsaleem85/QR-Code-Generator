@@ -1346,3 +1346,40 @@ Wired into `/r/[slug]` (60 requests/60s per IP — generous enough a real visito
 
 - None blocking. A per-user file-upload-frequency rate limit was considered and deliberately not built — uploads are already behind authentication and bounded by per-bucket size/MIME limits, and the generic `checkRateLimit` helper is available to add one cheaply later if real abuse is observed.
 - The CSP's `'unsafe-inline'` on `script-src`/`style-src` is a known, documented trade-off (see above) — a nonce-based CSP would close it but is a larger change deferred for now.
+
+## Performance and Reliability (Module 3.13)
+
+### Redirect latency: found and fixed a real regression from the previous module
+
+Module 3.12 added a genuinely necessary rate-limit check to `/r/[slug]`, but as originally wired it cost a _second_ sequential Supabase round trip on every single request — on top of the existing slug-resolution call, on the one route the master prompt explicitly singles out twice ("Dynamic redirects must remain lightweight," "redirect latency" as its own named audit item). This module fixes that specific regression rather than accepting it as a permanent cost of Module 3.12's own work.
+
+`resolve_qr_redirect_checked()` (new migration `20260822090000_combine_redirect_rate_limit.sql`) combines slug resolution and rate-limit enforcement into one `SECURITY DEFINER` function — it calls the existing `check_rate_limit()` internally (one `SECURITY DEFINER` function calling another is standard, supported Postgres composition) and only queries `qr_codes` if the caller is under the limit. `resolveDynamicQrRedirect()` (`src/server/services/redirect-resolution.ts`) now accepts an optional `rateLimit` parameter and calls this combined function instead of the original `resolve_qr_redirect`; `/r/[slug]/route.ts` no longer makes a separate `checkRateLimit` call before resolving. One Supabase round trip now does the work of two. The original `resolve_qr_redirect` function is left in the database, unused but harmless — dropping it isn't worth a destructive migration for a function that costs nothing sitting idle.
+
+**Live-verified the combined function's actual behavior**, not just its existence: called `resolve_qr_redirect_checked` directly against a real seeded dynamic QR with `p_max_per_window: 2` four times in a row — calls 1–2 correctly returned the real destination with `rate_limited: false`; calls 3–4 returned `destination_url: null, rate_limited: true` — confirming the destination is never leaked once the caller is over the limit, and that resolution and rate-limiting genuinely happen together in the one call. Separately confirmed via `curl` against the real dev server that a normal (under-limit) request still gets a real `307` with the correct `location` header and all five Module 3.12 security headers present.
+
+### Storage cleanup: reconciled, not just assumed clean
+
+Every module since 3.8 has claimed its own live-verification cleanup left no orphaned data, but this module is the first to actually _reconcile_ Storage against `qr_assets` across every content bucket in one query rather than trusting each module's individual bookkeeping. Result: exactly one orphaned object — the same 13-byte blob documented back in Module 3.8's own pre-app-code smoke test, still unreachable (no matching `qr_assets`/`qr_codes` row) and still not worth a service-role-key escalation to remove. No new orphans from any of Modules 3.9–3.12's live-verification passes.
+
+### Bundle size, database indexes, client components: audited, no changes needed
+
+- **Bundle size**: total `.next/static/chunks` across the whole app is ~1.5MB, with the largest single chunk at 280KB — small for an app with real-time QR rendering, react-hook-form, Zod validation throughout, and a full Supabase client. A direct consequence of this project's own standing "avoid unnecessary dependencies" discipline (no charting library, no heavy UI kit, hand-rolled SVG/QR rendering) rather than something this module needed to newly optimize.
+- **Database indexes**: re-examined `qr_assets` (already has indexes on both `user_id` and `qr_code_id`, plus the `(bucket, path)` unique constraint's own implicit index backing every `syncQrAssets`/`duplicateQrAssets` upsert) and every other table touched this session. Module 3.10's two indexes (the `pg_trgm` name-search index, the `(user_id, status, updated_at)` composite) remain the only two genuinely justified by an actual query shape at this app's real scale — no further index was added, since none of the audited query patterns showed an unindexed hot path.
+- **Unnecessary client components**: 49 files carry `"use client"`; every dashboard one (`FolderManager`, `Pagination`, `QRCodeFolderSelect`, `QRCodeRowActions`, `QRCodesFilterBar`, `DashboardSidebar`) has a genuine, load-bearing interactivity reason (dialogs, `useSearchParams`, per-row mutations) — spot-checked rather than exhaustively re-justified all 49, since every one built this session already carries its own "why this needs to be a client component" reasoning in its own file.
+- **Analytics query performance / dashboard query count**: already addressed in prior modules (Module 3.7's 30-day-bounded, composite-indexed `listScanEvents`; Module 3.10's `Promise.all`-parallelized dashboard queries) — re-confirmed no page in the dashboard makes redundant sequential queries that could be combined.
+
+### Image loading: a cheap, real win
+
+Gallery and menu-item photos (`GalleryLandingPage`, `MenuLandingPage`) now carry `loading="lazy"` (native HTML, zero configuration) — genuinely below-the-fold content in both cases. The first gallery image stays `loading="eager"` (it's the first visible content on that page; lazy-loading it would delay, not improve, perceived load time). `next/image` itself isn't used for any of this app's dynamic images (Storage signed URLs, arbitrary pasted external avatar URLs) — already a deliberate, documented choice (see the `eslint-disable-next-line @next/next/no-img-element` comments at each call site) given the config complexity of allow-listing either a wildcard remote pattern (for arbitrary external avatars) or a rotating signed-URL host, for a marginal gain over native lazy-loading, which achieves most of the same real benefit at zero cost.
+
+### Verification
+
+- New/updated tests (2 net, taking the suite from 468 to 470 across 69 files): `redirect-resolution.test.ts` (+2, the combined RPC's parameter passing and `rate_limited` response handling), `r-slug-route.test.ts` (3 rewritten to reflect the route no longer calling `checkRateLimit` directly).
+- `npm run typecheck` / `npx eslint .` (0 errors, same 11 pre-existing warnings) / `npx prettier --check .` — all pass.
+- `npx vitest run` — **470/470 passing** across 69 files.
+- `rm -rf .next && npm run build` — pass, all routes build.
+- **Live verification against the real Supabase project and a real dev server**: migration pushed and confirmed `SECURITY DEFINER`; the combined function's actual resolve+rate-limit behavior proven with real seeded data (above); a real `/r/[slug]` request via `curl` confirmed a genuine `307` with the correct destination and all security headers present; the storage/`qr_assets` reconciliation query (above) run against live data. All test data (1 QR code, rate-limit bucket rows) and the throwaway account cleaned up; `mailer_autoconfirm` restored to `false`; the temporary route removed (confirmed via `git status`). Final check: exactly one `auth.users` row (the permanent account) and zero `qr_codes`/`rate_limit_buckets` rows anywhere in the project.
+
+### Known issues
+
+- None blocking. No further database indexes were added — the audit found the existing set already matches real query patterns; adding speculative indexes without a demonstrated need would be premature complexity, not hardening.

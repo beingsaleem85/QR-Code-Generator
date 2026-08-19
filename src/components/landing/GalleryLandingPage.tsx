@@ -34,6 +34,7 @@ export async function GalleryLandingPage({ payloadData }: GalleryLandingPageProp
                 src={image.signedUrl}
                 alt={image.caption || image.fileName || `Image ${index + 1}`}
                 className="aspect-square w-full object-cover"
+                loading={index === 0 ? "eager" : "lazy"}
               />
               {image.caption ? (
                 <p className="px-3 pb-3 text-sm text-muted-foreground">{image.caption}</p>

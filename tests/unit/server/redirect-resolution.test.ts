@@ -35,7 +35,49 @@ describe("resolveDynamicQrRedirect", () => {
     const result = await resolveDynamicQrRedirect("abc12345");
 
     expect(result).toEqual({ status: "ok", destinationUrl: "https://example.com" });
-    expect(client.rpc).toHaveBeenCalledWith("resolve_qr_redirect", { p_slug: "abc12345" });
+    expect(client.rpc).toHaveBeenCalledWith("resolve_qr_redirect_checked", {
+      p_slug: "abc12345",
+      p_rate_limit_key: null,
+      p_max_per_window: 60,
+      p_window_seconds: 60,
+    });
+  });
+
+  it("passes the rate-limit key and config through to the combined RPC when provided", async () => {
+    const client = mockSupabase({
+      data: { destination_url: "https://example.com", status: "active", rate_limited: false },
+      error: null,
+    });
+    const { resolveDynamicQrRedirect } = await loadResolver(client);
+
+    await resolveDynamicQrRedirect("abc12345", {
+      key: "redirect:1.2.3.4",
+      maxPerWindow: 30,
+      windowSeconds: 60,
+    });
+
+    expect(client.rpc).toHaveBeenCalledWith("resolve_qr_redirect_checked", {
+      p_slug: "abc12345",
+      p_rate_limit_key: "redirect:1.2.3.4",
+      p_max_per_window: 30,
+      p_window_seconds: 60,
+    });
+  });
+
+  it("returns rate_limited (never resolving the slug's destination) when the combined RPC reports it", async () => {
+    const client = mockSupabase({
+      data: { destination_url: null, status: null, rate_limited: true },
+      error: null,
+    });
+    const { resolveDynamicQrRedirect } = await loadResolver(client);
+
+    const result = await resolveDynamicQrRedirect("abc12345", {
+      key: "redirect:1.2.3.4",
+      maxPerWindow: 30,
+      windowSeconds: 60,
+    });
+
+    expect(result).toEqual({ status: "rate_limited" });
   });
 
   it("returns not_found for an unknown slug", async () => {
