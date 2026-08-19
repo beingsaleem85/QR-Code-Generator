@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { profileSchema, type ProfileInput } from "@/lib/validation/account/profile";
+import { updateDisplayName } from "@/lib/account/actions";
+import { AUTH_REQUIRED } from "@/lib/qr/action-types";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
@@ -14,9 +17,12 @@ interface AccountProfileFormProps {
   email: string;
 }
 
+type SaveStatus = "idle" | "saving" | "success" | "error";
+
 export function AccountProfileForm({ initialDisplayName, email }: AccountProfileFormProps) {
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const router = useRouter();
+  const [status, setStatus] = useState<SaveStatus>("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const {
     register,
@@ -28,14 +34,28 @@ export function AccountProfileForm({ initialDisplayName, email }: AccountProfile
     defaultValues: { displayName: initialDisplayName },
   });
 
-  const onSubmit = handleSubmit(async () => {
-    setSubmitting(true);
-    // No backend yet — real profile updates are wired in Module 3.1. This
-    // delay stands in for a real request so the loading state is genuinely
-    // exercised, not just declared.
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    setSubmitting(false);
-    setSubmitted(true);
+  const onSubmit = handleSubmit(async (values) => {
+    setStatus("saving");
+    setErrorMessage(null);
+
+    const result = await updateDisplayName(values.displayName);
+
+    if (result.error) {
+      setStatus("error");
+      setErrorMessage(
+        result.error === AUTH_REQUIRED
+          ? "Your session has expired — please log in again."
+          : result.error,
+      );
+      return;
+    }
+
+    setStatus("success");
+    // The header block above this form is server-rendered from the same
+    // profile row (`account/page.tsx`) — refresh so it picks up the change
+    // without a full reload, the same pattern every other mutation in this
+    // app uses rather than duplicating server state into client state.
+    router.refresh();
   });
 
   return (
@@ -45,28 +65,29 @@ export function AccountProfileForm({ initialDisplayName, email }: AccountProfile
           id="displayName"
           autoComplete="name"
           invalid={!!errors.displayName}
-          {...register("displayName")}
+          {...register("displayName", {
+            onChange: () => {
+              if (status !== "idle") setStatus("idle");
+            },
+          })}
         />
       </FormField>
 
-      <FormField label="Email" htmlFor="email">
+      <FormField label="Email address" htmlFor="email">
         <Input id="email" type="email" value={email} disabled readOnly />
       </FormField>
       <p className="-mt-3 text-xs text-muted-foreground">
-        Email changes will be available once sign-in is connected in Module 3.1.
+        Email changes are not available from this page yet.
       </p>
 
       <div>
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Saving..." : "Save changes"}
+        <Button type="submit" disabled={status === "saving"}>
+          {status === "saving" ? "Saving…" : "Save changes"}
         </Button>
       </div>
 
-      {submitted ? (
-        <Alert variant="info">
-          Profile updates aren&apos;t connected to a backend yet — arrives in Module 3.1.
-        </Alert>
-      ) : null}
+      {status === "success" ? <Alert variant="success">Profile updated.</Alert> : null}
+      {status === "error" ? <Alert variant="error">{errorMessage}</Alert> : null}
     </form>
   );
 }

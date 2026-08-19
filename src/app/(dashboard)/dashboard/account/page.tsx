@@ -4,16 +4,18 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { getMyEntitlement, planLabel } from "@/lib/account/entitlements";
-import { MOCK_PROFILE } from "@/lib/account/mock-data";
+import { getMyProfile, resolveDisplayLabel } from "@/lib/account/profile";
 import { countDynamicQrCodes } from "@/lib/qr/queries";
 
 export default async function AccountPage() {
-  // Real end-to-end (unlike the rest of this page, still MOCK_PROFILE-driven
-  // until a future module wires the real profile) — the plan itself is a
-  // security-relevant fact, not display data, so it always reflects the
-  // actually-signed-in user's real entitlement.
+  // The plan itself is a security-relevant fact, not display data, so it
+  // always reflects the actually-signed-in user's real entitlement — same
+  // as the profile below: both come from the real Supabase Auth session,
+  // never mock/placeholder data.
+  const profile = await getMyProfile();
   const entitlement = await getMyEntitlement();
   const dynamicQrCount = await countDynamicQrCodes();
+  const displayLabel = resolveDisplayLabel(profile);
 
   return (
     <div className="flex flex-col gap-6">
@@ -22,16 +24,16 @@ export default async function AccountPage() {
       <div className="flex flex-col gap-4 px-4 pb-6 sm:px-6 lg:max-w-lg">
         <Card className="flex flex-col gap-4 p-5">
           <div className="flex items-center gap-4">
-            <Avatar name={MOCK_PROFILE.displayName} avatarUrl={MOCK_PROFILE.avatarUrl} />
+            <Avatar name={displayLabel} avatarUrl={profile.avatarUrl} />
             <div>
-              <p className="text-sm font-medium text-foreground">{MOCK_PROFILE.displayName}</p>
-              <p className="text-xs text-muted-foreground">{MOCK_PROFILE.email}</p>
+              <p className="text-sm font-medium text-foreground">{displayLabel}</p>
+              <p className="text-xs text-muted-foreground">{profile.email}</p>
             </div>
           </div>
 
           <AccountProfileForm
-            initialDisplayName={MOCK_PROFILE.displayName}
-            email={MOCK_PROFILE.email}
+            initialDisplayName={profile.displayName ?? ""}
+            email={profile.email}
           />
         </Card>
 
@@ -66,8 +68,7 @@ export default async function AccountPage() {
         <Card className="flex flex-col gap-3 p-5">
           <p className="text-sm font-medium text-foreground">Password &amp; security</p>
           <p className="text-xs text-muted-foreground">
-            Change your password or manage sign-in security once your account is connected to
-            Supabase Auth.
+            Password changes aren&apos;t available from this page yet.
           </p>
           <div>
             <Button variant="secondary" disabled>
