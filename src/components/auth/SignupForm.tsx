@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -96,6 +97,18 @@ export function SignupForm() {
       <Button type="submit" disabled={submitting || submitted} className="w-full">
         {submitting ? "Creating account..." : "Create account"}
       </Button>
+
+      <p className="text-center text-xs text-muted-foreground">
+        By creating an account, you agree to our{" "}
+        <Link href="/terms" className="text-primary hover:underline">
+          Terms of Service
+        </Link>{" "}
+        and{" "}
+        <Link href="/privacy" className="text-primary hover:underline">
+          Privacy Policy
+        </Link>
+        .
+      </p>
 
       {submitted ? (
         <Alert variant="success">

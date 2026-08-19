@@ -1421,3 +1421,38 @@ Every public page has exactly one `<h1>` (the homepage's lives in `Hero.tsx`); `
 
 - No Open Graph image exists yet (see above) — a real design asset, not something this module should fabricate. `openGraph`/`twitter` still populate title/description/type correctly without one; a shared link just won't show a preview image until a real one is designed and added.
 - `/pricing`/`/privacy`/`/terms` remain without `metadata` exports, matching their still-placeholder body content — `/privacy`/`/terms` get real content and metadata together in Module 3.15; `/pricing` stays a deliberate business-scope placeholder until monetization is in scope.
+
+## Legal and Privacy Readiness (Module 3.15)
+
+### `/privacy` and `/terms`: real, honest draft text — explicitly not final legal copy
+
+The master prompt is explicit for this module: build the pages with real content, but "do not invent legal guarantees" and "clearly distinguish implementation from legal approval." Both pages open with a visible `Alert` banner stating the text is a draft prepared during implementation, not yet reviewed by legal counsel or the product owner — this isn't boilerplate throat-clearing, it's the module's own literal instruction made visible to anyone reading the page, including a future reviewer who needs to know at a glance that this hasn't been signed off.
+
+Every factual claim on both pages was checked against what the app actually does, not written from a generic legal-copy template:
+
+- **Privacy Policy** (`src/app/(marketing)/privacy/page.tsx`): the "Information we collect" section enumerates exactly the categories this app stores — account email (Supabase Auth), QR content (whatever the owner enters), uploaded files (Supabase Storage), feedback submissions (Module 3.9, consent-gated, owner-only-read, immutable), and scan analytics (Module 3.7's exact field list — timestamp/referrer/device/OS/browser/country-when-available, explicitly no raw IP or cross-visitor identifier). The **cookies** section states the literal truth: exactly one cookie type exists (Supabase Auth's session cookie), no third-party analytics or advertising cookies, since none are integrated anywhere in this codebase. The **retention** section states the real cascade behavior verified directly from the migrations — deleting a QR code cascades its scan events (`qr_scan_events`) and feedback (`qr_feedback_submissions`) via `ON DELETE CASCADE`, and deleting an account cascades `profiles`/`qr_codes`/`qr_folders`/`account_entitlements` the same way — plus an honest, undecorated admission that no self-service account-deletion control exists in the dashboard yet, rather than describing a "Delete Account" button that isn't built.
+- **Terms of Service** (`src/app/(marketing)/terms/page.tsx`): the "Dynamic QR codes" section states plainly that a printed dynamic QR code's destination is under the owner's control and can change after printing, so the service isn't responsible for what it resolves to at any given moment — a direct, honest consequence of how dynamic QR codes actually work (Module 3.6), not a generic liability clause. The "File uploads" section cites the real, current size limits (20MB/10MB/15MB) already established in Module 3.9's FAQ content, rather than restating them from memory and risking drift.
+- **No fabricated contact channel.** Neither page invents a support email address — no such address exists anywhere in this codebase or its configuration, and publishing one that doesn't actually receive mail would be actively misleading to a real user trying to exercise a privacy right. Both pages instead state plainly that a dedicated contact address will be added before legal review, a real, visible gap rather than a fabricated one.
+- **No invented legal guarantees.** Neither page claims compliance with a specific regulatory framework (GDPR, CCPA, etc.) or promises a specific SLA — both are legal/business decisions this module isn't positioned to make on its own.
+
+### Signup consent line
+
+`SignupForm.tsx` gained a small, real addition once `/terms`/`/privacy` had genuine content worth linking to: a passive acknowledgment line under the submit button ("By creating an account, you agree to our Terms of Service and Privacy Policy") linking to both real pages. This is a plain sentence, not a required checkbox — consistent with this app's existing account-creation flow, which doesn't gate submission on any other acknowledgment either, and avoids adding new required form state for what a passive notice already covers reasonably.
+
+### `sitemap.ts` updated
+
+`/privacy` and `/terms` were added to `src/app/sitemap.ts` (Module 3.14 had deliberately excluded them while they were still placeholder content) — both at low priority (0.3) and `yearly` change frequency, appropriate for legal pages that change infrequently and aren't primary marketing content.
+
+### Verification
+
+- No new tests — both pages are static server-rendered content with no new interactive logic; `SignupForm.test.tsx`'s existing assertions don't collide with the new consent line's text (checked by reading the test file, not assumed).
+- `npm run typecheck` / `npx eslint .` (0 errors, same 11 pre-existing warnings — an initial pass surfaced 45 real `react/no-unescaped-entities` errors from the legal copy's own apostrophes/quotes, fixed by rewriting both pages with `&apos;`/`&quot;` entities) / `npx prettier --check .` — all pass.
+- `npx vitest run` — **469/470 passing** across 69 files (the same pre-existing `QRGeneratorShellSave.test.tsx` full-suite-parallel-only flake as Module 3.14, reconfirmed unrelated by re-running that file alone: 5/5 pass).
+- `rm -rf .next && npm run build` — pass; `/privacy` and `/terms` both still prerender static (`○`).
+- **Live verification against a real production server** (`next start`, not dev): fetched `/privacy` and `/terms`'s actual rendered HTML and confirmed the title tag reads "Privacy Policy | QRForge"/"Terms of Service | QRForge" (title template working), the canonical link is correct, entities render as real apostrophes/quotes in the served HTML (not literal `&apos;`/`&quot;` text), and `/signup`'s rendered HTML includes the new "Terms of Service" consent link. Fetched `/robots.txt` and confirmed the full disallow list; fetched `/sitemap.xml` and confirmed `/privacy`/`/terms` now appear. Server process stopped by its specific PID (found via `Get-NetTCPConnection`), confirmed down by a failed follow-up request — no broad process-kill command used.
+
+### Known issues
+
+- No dedicated privacy/legal contact address exists — both pages say so honestly rather than fabricating one. Add a real address (and wire it into both pages) before these are sent for actual legal review.
+- No self-service account-deletion control exists in the dashboard — `/privacy` discloses this honestly. Building one isn't this module's scope (a dashboard feature, not a legal-copy task), but it's a real prerequisite for the privacy policy's own retention section to be fully self-service rather than request-based.
+- Neither page has had an actual legal review — both explicitly say so via the on-page banner. Do not remove that banner without a real legal sign-off replacing it.

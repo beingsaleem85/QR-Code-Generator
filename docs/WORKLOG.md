@@ -1027,4 +1027,33 @@ Known issues:
 
 Next:
 
+- Module 3.15 — Legal and Privacy Readiness
+
+## Module 3.15 — Legal and Privacy Readiness
+
+Status: COMPLETE
+
+Completed:
+
+- Wrote real, honest draft content for `/privacy` and `/terms` (both real routes, still Module 1.2's Phase-2 `RouteStub`s until now) — every factual claim checked against what the app actually does (Module 3.7's exact scan-analytics field list, Module 3.9's feedback consent/immutability behavior, the real `ON DELETE CASCADE` retention behavior verified directly from the migrations, Module 3.9's real file-size limits) rather than written from a generic legal-copy template. Per the master prompt's explicit instruction for this module, both pages open with a visible banner stating the text is an implementation-stage draft, not yet reviewed by legal counsel or the product owner — "clearly distinguish implementation from legal approval" made literal, not just implied.
+- Neither page invents a legal guarantee (no claimed regulatory compliance, no SLA) or a fabricated contact channel — both honestly disclose that a dedicated privacy/legal contact address doesn't exist yet, and `/privacy` honestly discloses that no self-service account-deletion control exists in the dashboard yet either, rather than describing features that aren't built.
+- Added `metadata` exports to both pages now that their content is real (Module 3.14 deliberately withheld metadata from placeholder content) and added both to `src/app/sitemap.ts` at low priority/yearly change frequency.
+- Added a passive Terms/Privacy acknowledgment line to `SignupForm` linking to both real pages — a plain sentence under the submit button, not a new required checkbox, consistent with the existing signup flow's lack of any other gating acknowledgment.
+
+Verification:
+
+- No new tests — both pages are static content with no new interactive logic; confirmed `SignupForm.test.tsx`'s existing assertions don't collide with the new consent line.
+- `npm run typecheck` / `npx eslint .` (0 errors, same 11 pre-existing warnings — an initial pass surfaced 45 real `react/no-unescaped-entities` errors from the legal copy's own apostrophes/quotes, fixed) / `npx prettier --check .` — pass.
+- `npx vitest run` — **469/470 passing** across 69 files (same pre-existing full-suite-parallel-only flake as Module 3.14, reconfirmed unrelated: the one file passes 5/5 in isolation).
+- `rm -rf .next && npm run build` — pass; both pages still prerender static.
+- **Live verification against a real production server** (`next start`): confirmed real rendered HTML for both pages (correct title-template output, correct canonical, entities rendering as real punctuation not literal escape text), confirmed `/signup`'s new consent link renders, confirmed `/robots.txt`/`/sitemap.xml` reflect the new pages. Server stopped by its specific PID, confirmed down. Full detail in `docs/ARCHITECTURE.md`.
+
+Known issues:
+
+- No dedicated privacy/legal contact address exists yet — both pages disclose this honestly rather than fabricating one.
+- No self-service account-deletion control exists in the dashboard — a real prerequisite for `/privacy`'s retention section to become fully self-service, out of this module's scope (a dashboard feature, not legal copy).
+- Neither page has had an actual legal review — the on-page banner says so explicitly; don't remove it without a real sign-off replacing it.
+
+Next:
+
 - Module 3.14 — SEO and Public Content
