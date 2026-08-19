@@ -205,6 +205,36 @@ describe("saveQrCode", () => {
     expect(client.from).toHaveBeenCalledTimes(2);
   });
 
+  it("translates the database-level quota trigger's raw exception into a safe message — never the raw Postgres text", async () => {
+    // Simulates the app-level pre-check passing (e.g. a stale read in a
+    // genuine concurrent-request race) while the database's own trigger
+    // still correctly rejects the insert — the last line of defense, not
+    // the normal path.
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        { data: null, error: null }, // entitlement lookup: app-level check sees unlimited
+        {
+          data: null,
+          error: {
+            message:
+              "DYNAMIC_QR_QUOTA_EXCEEDED: account user-1 has reached its dynamic QR limit of 1",
+            code: "P0001",
+          },
+        }, // insert: rejected by the DB trigger anyway
+      ],
+    });
+    const { saveQrCode } = await loadActions(client);
+
+    const result = await saveQrCode({ ...VALID_INPUT, mode: "dynamic" });
+
+    expect(result.error).toBe(
+      "You've reached your plan's limit of dynamic QR codes. Archive or delete one to create another, or upgrade your plan.",
+    );
+    expect(result.error).not.toContain("DYNAMIC_QR_QUOTA_EXCEEDED");
+    expect(result.error).not.toContain("P0001");
+  });
+
   it("mints a public_token for a PDF QR created with openDirectly on", async () => {
     const client = mockSupabase({
       user: mockUser,
@@ -379,6 +409,32 @@ describe("updateQrCode", () => {
     const result = await updateQrCode("qr-1", VALID_INPUT);
 
     expect(result.data).toEqual({ id: "qr-1" });
+  });
+
+  it("translates the database-level quota trigger's rejection on a static->dynamic conversion too", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        { data: { slug: null, mode: "static" }, error: null }, // existence check
+        { data: null, error: null }, // entitlement lookup: app-level check sees unlimited
+        {
+          data: null,
+          error: {
+            message:
+              "DYNAMIC_QR_QUOTA_EXCEEDED: account user-1 has reached its dynamic QR limit of 1",
+            code: "P0001",
+          },
+        }, // the update itself: rejected by the DB trigger anyway
+      ],
+    });
+    const { updateQrCode } = await loadActions(client);
+
+    const result = await updateQrCode("qr-1", { ...VALID_INPUT, mode: "dynamic" });
+
+    expect(result.error).toBe(
+      "You've reached your plan's limit of dynamic QR codes. Archive or delete one to create another, or upgrade your plan.",
+    );
+    expect(result.error).not.toContain("DYNAMIC_QR_QUOTA_EXCEEDED");
   });
 
   it("re-derives destination_url from the new content, keeping the existing slug", async () => {
@@ -647,6 +703,42 @@ describe("duplicateQrCode", () => {
     const result = await duplicateQrCode("source-id");
 
     expect(result.error).toMatch(/limit of 2/i);
+  });
+
+  it("translates the database-level quota trigger's rejection on duplicate into a safe message too", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        {
+          data: {
+            name: "Original",
+            mode: "dynamic",
+            qr_type: "url",
+            payload_data: { url: "https://example.com" },
+            design_config: DEFAULT_DESIGN_CONFIG,
+            destination_url: "https://example.com",
+          },
+          error: null,
+        }, // source fetch
+        { data: null, error: null }, // entitlement lookup: app-level check sees unlimited
+        {
+          data: null,
+          error: {
+            message:
+              "DYNAMIC_QR_QUOTA_EXCEEDED: account user-1 has reached its dynamic QR limit of 2",
+            code: "P0001",
+          },
+        }, // insert: rejected by the DB trigger anyway
+      ],
+    });
+    const { duplicateQrCode } = await loadActions(client);
+
+    const result = await duplicateQrCode("source-id");
+
+    expect(result.error).toBe(
+      "You've reached your plan's limit of dynamic QR codes. Archive or delete one to create another, or upgrade your plan.",
+    );
+    expect(result.error).not.toContain("DYNAMIC_QR_QUOTA_EXCEEDED");
     expect(result.data).toBeUndefined();
   });
 

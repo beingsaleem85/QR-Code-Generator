@@ -27,6 +27,27 @@ function revalidateQrPaths(id?: string) {
 const UNIQUE_VIOLATION = "23505";
 const MAX_SLUG_ATTEMPTS = 3;
 
+/**
+ * Matches the sentinel `enforce_dynamic_qr_quota()` raises in
+ * `supabase/migrations/20260822110000_enforce_dynamic_qr_quota.sql` when
+ * the database-level quota trigger rejects an insert/update — the
+ * app-level `checkDynamicQrAllowance` below normally catches this first,
+ * so reaching the trigger's own rejection only happens on a genuine
+ * concurrent-request race or a direct API call that bypassed the app
+ * layer entirely. Either way, the raw Postgres exception text must never
+ * reach the user.
+ */
+const DYNAMIC_QR_QUOTA_TRIGGER_MARKER = "DYNAMIC_QR_QUOTA_EXCEEDED";
+const DYNAMIC_QR_QUOTA_TRIGGER_MESSAGE =
+  "You've reached your plan's limit of dynamic QR codes. Archive or delete one to create another, or upgrade your plan.";
+
+function translateQrCodesError(error: { message: string }): string {
+  if (error.message.includes(DYNAMIC_QR_QUOTA_TRIGGER_MARKER)) {
+    return DYNAMIC_QR_QUOTA_TRIGGER_MESSAGE;
+  }
+  return error.message;
+}
+
 async function requireUser(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
     data: { user },
@@ -148,7 +169,7 @@ export async function saveQrCode(input: SaveQrCodeInput): Promise<ActionResult<{
       revalidateQrPaths(data.id);
       return { data: { id: data.id } };
     }
-    if (error.code !== UNIQUE_VIOLATION) return { error: error.message };
+    if (error.code !== UNIQUE_VIOLATION) return { error: translateQrCodesError(error) };
     lastError = error.message;
   }
   return { error: lastError ?? "Couldn't save — please try again." };
@@ -212,6 +233,9 @@ export async function updateQrCode(
       return { data: { id: data.id } };
     }
     if (error.code !== UNIQUE_VIOLATION) {
+      if (error.message.includes(DYNAMIC_QR_QUOTA_TRIGGER_MARKER)) {
+        return { error: DYNAMIC_QR_QUOTA_TRIGGER_MESSAGE };
+      }
       return {
         error: "Couldn't save changes — it may have been deleted, or you may not have access.",
       };
@@ -293,7 +317,7 @@ export async function duplicateQrCode(id: string): Promise<ActionResult<{ id: st
       revalidateQrPaths(data.id);
       return { data: { id: data.id } };
     }
-    if (error.code !== UNIQUE_VIOLATION) return { error: error.message };
+    if (error.code !== UNIQUE_VIOLATION) return { error: translateQrCodesError(error) };
     lastError = error.message;
   }
   return { error: lastError ?? "Couldn't duplicate — please try again." };
