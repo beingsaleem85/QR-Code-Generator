@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { AnalyticsPreview } from "@/components/marketing/AnalyticsPreview";
 import { CtaBanner } from "@/components/marketing/CtaBanner";
 import { FaqTeaser } from "@/components/marketing/FaqTeaser";
@@ -9,6 +10,10 @@ import { QrTypeGrid } from "@/components/marketing/QrTypeGrid";
 import { StaticVsDynamic } from "@/components/marketing/StaticVsDynamic";
 import { TrustStrip } from "@/components/marketing/TrustStrip";
 import { UseCases } from "@/components/marketing/UseCases";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 export default function Home() {
   return (

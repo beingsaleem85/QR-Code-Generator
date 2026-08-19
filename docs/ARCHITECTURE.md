@@ -1383,3 +1383,41 @@ Gallery and menu-item photos (`GalleryLandingPage`, `MenuLandingPage`) now carry
 ### Known issues
 
 - None blocking. No further database indexes were added — the audit found the existing set already matches real query patterns; adding speculative indexes without a demonstrated need would be premature complexity, not hardening.
+
+## SEO and Public Content (Module 3.14)
+
+### Three marketing pages were still Phase-2 placeholders — real content came first, metadata second
+
+Before this module, `/features`, `/faq`, and `/qr-types` were still literal `RouteStub` placeholders left over from Module 1.2, despite being live navigation targets (`FeatureCards`/`StaticVsDynamic`/`QrTypeGrid` on the homepage all link to one of these three) and despite the master prompt's own explicit instructions for this exact module: "Create original useful content. Do not mass-produce thin SEO pages," and "FAQ structured data only if content truly exists." Attaching real `metadata`/canonical/structured-data to a page whose body is a one-line placeholder would have violated both instructions directly, so writing genuine content for these three was brought into this module's scope before any metadata work began. `/privacy` and `/terms` were deliberately left untouched — both `RouteStub` descriptions explicitly say their real legal copy is Module 3.15's job, and `/pricing`'s stub explicitly says billing/monetization content is out of scope until a later, separate business decision — none of these three is this module's call to make.
+
+- **`/features`**: four real feature groups (12 blurbs total) — Design and generation, Dynamic QR codes and analytics, Beyond links, Organization and security — describing functionality that actually exists in this codebase today (verified against the registry/actions/RLS work from Modules 3.1–3.13, not aspirational copy).
+- **`/faq`**: 7 real question/answer pairs (static-vs-dynamic, editing after printing, the full supported-type list, file size/type limits, exactly what scan data is/isn't collected, feedback-submission privacy, organization features) plus `FAQPage` JSON-LD structured data — added specifically because the content backing it is now real. The JSON-LD is emitted via a raw `<script type="application/ld+json">` (the standard Next.js pattern for structured data, not `next/script`, which targets loadable/executable scripts) with `dangerouslySetInnerHTML={{ __html: JSON.stringify(...) }}` — safe here because the serialized value is this file's own static array, never any form of user input.
+- **`/qr-types`**: rewritten to read `listQrTypeDefinitions()` (`src/lib/qr/registry.ts`) — the same registry the real generator's type selector uses — and render one short, original description per type, split into an "available" grid and a "coming soon" section for `barcode_2d`/`location` (the two registry entries still on `notYetImplementedQrSchema`, identified via `CONTENT_FORMS` from `src/components/qr/content-forms/index.ts` rather than a hand-maintained list, so a type gaining real support later moves sections automatically with no page edit needed).
+- **`/static-qr`/`/dynamic-qr`**: also still Phase-2 `RouteStub`s despite being real explainer pages linked from `StaticVsDynamic` on the homepage — rewritten with genuine static-vs-dynamic explainer content and a "which QR types support this mode" cross-reference driven by the same registry facts (`staticSupport`/`dynamicSupport`), not duplicated by hand.
+
+### Metadata, title template, and `metadataBase`
+
+The root layout (`src/app/layout.tsx`) now sets `metadataBase` (from `NEXT_PUBLIC_APP_URL`, the same env var `src/lib/qr/redirect-url.ts` already uses for `/r/`/`/p/` link generation — no new env var introduced) and a `title` template (`"%s | QRForge"` with a `default`), plus sitewide `openGraph`/`twitter` fields (title/description/siteName/type/card, text-only). Every public page (`/`, `/qr-generator`, `/features`, `/faq`, `/qr-types`, `/static-qr`, `/dynamic-qr`) now exports its own `metadata` with a short `title` (composed through the template) and `alternates.canonical`. `/pricing`/`/privacy`/`/terms` were **not** given a `metadata` export — a stub page with real SEO metadata but placeholder body content is worse for indexing than no metadata at all, and would misrepresent to search engines that the content is finished.
+
+No Open Graph image exists (`public/` has no image assets at all, only `favicon.ico`) — `openGraph.images`/`twitter.images` were deliberately left unset rather than pointed at a fabricated or nonexistent file path. This is a real, documented gap (see Known issues), not an oversight.
+
+### `sitemap.ts` / `robots.ts`
+
+Both use the App Router's native file-convention routes (`src/app/sitemap.ts`, `src/app/robots.ts`) — no third-party package. The sitemap lists exactly the 7 genuinely public, content-bearing pages (`/`, `/qr-generator`, `/qr-types`, `/features`, `/static-qr`, `/dynamic-qr`, `/faq`); `/pricing`/`/privacy`/`/terms` are deliberately omitted (still placeholder content — submitting a thin page for indexing works against SEO, not for it) and `/login`/`/signup`/etc. are omitted since they're not content pages at all. `robots.ts` disallows `/dashboard`, `/api`, `/r`, `/p`, plus the full real auth route set — **not** just `/auth`: the `(auth)` route group's pages are `/login`, `/signup`, `/forgot-password`, `/reset-password`, and `/auth/callback`, only the last of which actually lives under an `/auth` path prefix, so `/login`/`/signup`/`/forgot-password`/`/reset-password` needed their own explicit disallow entries or they'd have been silently crawlable.
+
+### Heading hierarchy and static rendering
+
+Every public page has exactly one `<h1>` (the homepage's lives in `Hero.tsx`); `SectionHeading` renders `<h2>` for section titles and `Card`-based item titles render `<h3>` — confirmed via a grep sweep across `src/app/(marketing)` and `src/components/marketing`, no skipped levels or duplicate `<h1>`s found. A fresh production build confirms every public route still prerenders as static (`○` in the build output) — `/`, `/features`, `/faq`, `/qr-types`, `/static-qr`, `/dynamic-qr`, `/qr-generator`, `/pricing`, `/privacy`, `/terms`, `/robots.txt`, `/sitemap.xml` are all static; only the genuinely per-user/per-QR routes (`/dashboard/*`, `/p/[slug]`, `/r/[slug]`, `/auth/callback`) are dynamic, exactly as expected.
+
+### Verification
+
+- New tests: none added this module — the changes are server-rendered metadata/markup/config, verified by reading the actual rendered HTML/JSON output rather than by new unit tests (no new branching logic was introduced that unit tests would meaningfully cover).
+- `npm run typecheck` / `npx eslint .` (0 errors, same 11 pre-existing warnings, two new `react/no-unescaped-entities` errors caught and fixed — a literal apostrophe in `/faq` and `/qr-types` body copy) / `npx prettier --check .` — all pass.
+- `npx vitest run` — 470/470 passing across 69 files (one test, `QRGeneratorShellSave.test.tsx`, failed only under full-suite parallel execution with a jsdom "navigation to another Document" timeout unrelated to this module's changes — confirmed pre-existing flakiness by re-running that file alone, where all 5 tests pass cleanly).
+- `rm -rf .next && npm run build` — pass; confirmed every public route still prerenders static, `/robots.txt` and `/sitemap.xml` both build successfully as new static routes.
+- No live Supabase verification was needed this module — nothing here touches the database, RLS, or any Server Action; every change is either static marketing content or Next.js's own build-time metadata/file-convention routes, verifiable entirely from the production build output and rendered HTML.
+
+### Known issues
+
+- No Open Graph image exists yet (see above) — a real design asset, not something this module should fabricate. `openGraph`/`twitter` still populate title/description/type correctly without one; a shared link just won't show a preview image until a real one is designed and added.
+- `/pricing`/`/privacy`/`/terms` remain without `metadata` exports, matching their still-placeholder body content — `/privacy`/`/terms` get real content and metadata together in Module 3.15; `/pricing` stays a deliberate business-scope placeholder until monetization is in scope.

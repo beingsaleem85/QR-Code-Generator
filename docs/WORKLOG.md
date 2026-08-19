@@ -998,3 +998,33 @@ Known issues:
 Next:
 
 - Module 3.14 — SEO and Public Content
+
+## Module 3.14 — SEO and Public Content
+
+Status: COMPLETE
+
+Completed:
+
+- **Found three navigation targets still rendering Module 1.2's Phase-2 `RouteStub` placeholder** despite being linked from the real homepage (`FeatureCards`/`StaticVsDynamic`/`QrTypeGrid`): `/features`, `/faq`, `/qr-types` — plus `/static-qr`/`/dynamic-qr`, also real explainer pages still stubbed. Wrote genuine content for all five before any metadata work, per the master prompt's own "do not mass-produce thin SEO pages" / "FAQ structured data only if content truly exists" instructions for this module — attaching real SEO metadata to a placeholder body would have violated both. `/privacy`/`/terms` (explicitly Module 3.15's job per their own stub text) and `/pricing` (a deliberate business-scope placeholder) were left untouched — not this module's call.
+- `/qr-types` and `/static-qr`/`/dynamic-qr`'s "which types support this mode" section are registry-driven (`listQrTypeDefinitions()`, `CONTENT_FORMS`) rather than hand-maintained lists, so they stay correct automatically as new types gain real support.
+- `/faq` includes real `FAQPage` JSON-LD structured data (raw `<script type="application/ld+json">`, safe since the serialized value is the file's own static array, never user input).
+- Added `metadata` exports (title/description/canonical) to every real public page (`/`, `/qr-generator`, `/features`, `/faq`, `/qr-types`, `/static-qr`, `/dynamic-qr`); root layout gained `metadataBase` (reusing the existing `NEXT_PUBLIC_APP_URL` convention), a title template (`"%s | QRForge"`), and sitewide text-only `openGraph`/`twitter` fields.
+- Added `src/app/sitemap.ts` (7 genuinely public, content-bearing routes) and `src/app/robots.ts` (disallows `/dashboard`, `/api`, `/r`, `/p`, and the full real auth route set — not just `/auth`, since `/login`/`/signup`/`/forgot-password`/`/reset-password` are separate top-level routes in the `(auth)` group, not nested under `/auth`).
+- Audited heading hierarchy (exactly one `<h1>` per public page, consistent `<h2>`/`<h3>` nesting) and confirmed via a fresh production build that every public page still prerenders as static (`○`).
+
+Verification:
+
+- No new tests — this module's changes are server-rendered metadata/markup/config with no new branching logic to unit-test; verified by reading actual rendered HTML/build output instead.
+- `npm run typecheck` / `npx eslint .` (0 errors, same 11 pre-existing warnings, two new `react/no-unescaped-entities` errors caught and fixed) / `npx prettier --check .` — pass.
+- `npx vitest run` — **470/470 passing** across 69 files (one full-suite-parallel-only flake in `QRGeneratorShellSave.test.tsx`, confirmed pre-existing and unrelated by re-running that file alone: 5/5 pass).
+- `rm -rf .next && npm run build` — pass; confirmed every public route prerenders static, `/robots.txt`/`/sitemap.xml` both build as new static routes.
+- No live Supabase verification needed — nothing this module touches the database, RLS, or any Server Action. Full detail in `docs/ARCHITECTURE.md`.
+
+Known issues:
+
+- No Open Graph image exists (`public/` has no image assets besides `favicon.ico`) — a real design asset, deliberately not fabricated. `openGraph`/`twitter` still populate correctly without one.
+- `/pricing`/`/privacy`/`/terms` still have no `metadata` export, matching their still-placeholder content — `/privacy`/`/terms` get real content and metadata together in Module 3.15; `/pricing` stays a deliberate placeholder.
+
+Next:
+
+- Module 3.14 — SEO and Public Content

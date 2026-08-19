@@ -13,8 +13,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "QRForge — QR Code Generator",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  title: {
+    default: "QRForge — QR Code Generator",
+    template: "%s | QRForge",
+  },
   description: "Generate, customize, and track QR codes.",
+  openGraph: {
+    siteName: "QRForge",
+    title: "QRForge — QR Code Generator",
+    description: "Generate, customize, and track QR codes.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "QRForge — QR Code Generator",
+    description: "Generate, customize, and track QR codes.",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
