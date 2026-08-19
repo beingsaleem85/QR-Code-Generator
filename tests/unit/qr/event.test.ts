@@ -44,4 +44,38 @@ describe("event QR", () => {
   it("rejects an invalid start date", () => {
     expect(() => eventQrSchema.parse({ title: "Bad Date", start: "not-a-date" })).toThrow();
   });
+
+  it("still rejects a genuinely invalid (non-blank) end date", () => {
+    expect(() =>
+      eventQrSchema.parse({
+        title: "Bad End",
+        start: "2026-09-01T10:00:00.000Z",
+        end: "not-a-date",
+      }),
+    ).toThrow();
+  });
+
+  it('accepts a blank end date the way the form actually submits it — as "", not undefined', () => {
+    // EventForm's defaultValues always send a string for `end` (asString()
+    // defaults to ""), never an omitted/undefined key — this is the exact
+    // shape a real Save click produces when the (labeled optional) Ends
+    // field is left blank.
+    const parsed = eventQrSchema.parse({
+      title: "No End Time",
+      start: "2026-09-01T10:00:00.000Z",
+      end: "",
+    });
+    const payload = buildEventPayload(parsed);
+    expect(payload).not.toContain("DTEND:");
+  });
+
+  it("also accepts a whitespace-only end date the same way", () => {
+    expect(() =>
+      eventQrSchema.parse({
+        title: "No End Time",
+        start: "2026-09-01T10:00:00.000Z",
+        end: "   ",
+      }),
+    ).not.toThrow();
+  });
 });
