@@ -16,7 +16,13 @@ import path from "node:path";
  * project's own subdomain. `img-src` allows any `https:` source because
  * Module 3.9's Social QR type lets an owner paste an arbitrary external
  * avatar URL by design — restricting this would break a real, intended
- * feature, not just an XSS surface.
+ * feature, not just an XSS surface. `img-src` also allows `blob:` — found
+ * live by Module 3.16's E2E suite that PNG export (`QRDownloadActions`,
+ * `renderStyledQrPngDataUrl`) loads the rendered SVG into an `<img>` via a
+ * `blob:` object URL before drawing it to canvas; without `blob:` here,
+ * every PNG download was silently CSP-blocked in production since this
+ * policy shipped in Module 3.12 (page-load checks never exercised the
+ * download button, so it went unnoticed until a real click-through test).
  *
  * `'unsafe-eval'` is added to `script-src` in development only — confirmed
  * live (Module 3.12) that without it, React's dev-mode tooling logs
@@ -29,7 +35,7 @@ const CSP = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https:",
+  "img-src 'self' data: blob: https:",
   "media-src 'self' https://*.supabase.co",
   "frame-src 'self' https://*.supabase.co https://www.youtube.com https://player.vimeo.com",
   "connect-src 'self' https://*.supabase.co",

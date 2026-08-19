@@ -1056,4 +1056,37 @@ Known issues:
 
 Next:
 
+- Module 3.16 — Test Suite and End-to-End Verification
+
+## Module 3.16 — Test Suite and End-to-End Verification
+
+Status: COMPLETE
+
+Completed:
+
+- **Unit test coverage audit**: checked all seven units the master prompt names against the existing 470 unit tests before writing anything new. Six were already covered (payload builders, URL validation, Wi-Fi escaping, vCard generation, download filename sanitization, and "design config validation" via `reliability.test.ts`'s contrast/logo/EC-level rules, since no literal Zod design schema exists). One real gap found: `generateRandomSlug()` (`src/lib/qr/slug.ts`) had zero coverage anywhere — closed with `tests/unit/qr/slug.test.ts`.
+- **Integration test audit**: judged this project's existing unit-level Server Action/service tests (mocked Supabase, asserting real RLS-aware query shape and error handling) as already satisfying "cover where practical" for QR CRUD, ownership/RLS, dynamic destination update, scan event creation, and storage metadata — confirmed by reading the actual existing tests, not assumed. `tests/integration/` stays empty by this judgment.
+- **Installed Playwright** (`@playwright/test`) — no E2E framework existed before this module. `playwright.config.ts`: 3 projects (chromium-desktop, firefox-desktop, chromium-mobile via device emulation), serial execution (`workers: 1`, not the default parallel) since Journeys B-F run real signups against the live Supabase project and a full-parallel run made every auth-dependent journey time out from Supabase Auth's own signup rate limiting — confirmed live, not assumed. `npm run test:e2e`/`test:e2e:ui` added, kept separate from `npm test` (vitest's include glob doesn't touch `tests/e2e/`).
+- **Built and live-verified all 6 named E2E journeys** (A: Anonymous Static QR, B: Account Creation, C: Dynamic QR, D: Analytics, E: Authorization, F: File QR) against the real live Supabase project, using the established throwaway-account (`mailer_autoconfirm` toggle) technique. 12/12 passing (6 journeys × 2 working browser projects).
+- **Found and fixed a real production bug via Journey A**: Module 3.12's CSP `img-src` directive never included `blob:`, only `data:`/`https:` — silently CSP-blocking every PNG download in production since that module shipped, because Module 3.12's own live verification only checked page loads, never clicked the download button. Fixed with one token in `next.config.ts`; re-verified live in both a dev and a real production server.
+- **Firefox couldn't be launched** in this sandboxed environment (`spawn UNKNOWN`, confirmed not a sandbox-permission issue) — the `firefox-desktop` project stays correctly configured for a normal CI/local run; Chromium desktop + mobile-emulated fully exercise every journey, matching the master prompt's own "if available" wording for the second engine.
+- **Full cleanup**: 35 throwaway test accounts deleted (`DELETE FROM auth.users WHERE email LIKE 'e2e-%@example.com'`, cascades everything else); `mailer_autoconfirm` restored to `false` and confirmed. 5 small orphaned PDF blobs remain in Storage (a direct-SQL delete was rejected by Supabase's own protection trigger; fixing it properly would need signing in as 5 different throwaway owners for 5 dummy fixtures — accepted as a harmless, documented trade-off, consistent with this project's existing Module 3.8 orphan precedent, and specifically not a reason to introduce the service-role key).
+
+Verification:
+
+- New tests: `tests/unit/qr/slug.test.ts` (+4); `tests/e2e/journey-{a..f}-*.spec.ts` (6 new specs).
+- `npm run typecheck` (covers `tests/e2e/**` too) / `npx eslint .` (0 errors, same 11 pre-existing warnings) / `npx prettier --check .` — pass.
+- `npx vitest run` — **474/474 passing** across 70 files (no flake this run).
+- `npx playwright test --project=chromium-desktop --project=chromium-mobile` — **12/12 passing**, run serially against the real live project.
+- `rm -rf .next && npm run build` — pass; all previously-static routes remain static.
+- **Live verification against the real Supabase project, a real dev server, and a real production server**: every journey ran against real signups/QRs/scans/files, not mocks; the CSP fix confirmed present in both dev and `next start` production response headers. Full cleanup performed and confirmed via a final SQL check (exactly 1 `auth.users` row, the permanent account; 0 `qr_codes`/`qr_assets`/`qr_scan_events`/`qr_feedback_submissions` rows anywhere). Server processes stopped by specific PID, never a broad kill command. Full detail in `docs/ARCHITECTURE.md`.
+
+Known issues:
+
+- Firefox cannot launch in this specific sandboxed environment — an environment gap, not a code defect; the Playwright project is still correctly configured.
+- E2E Journeys B-F require `mailer_autoconfirm=true` on the live project to run (no dedicated disposable test Supabase project exists) — running without it fails fast with a clear error, not a silent hang.
+- 5 small orphaned PDF blobs remain in the `qr-documents` bucket — harmless, isolated per-owner paths, consistent with existing accepted-orphan precedent.
+
+Next:
+
 - Module 3.14 — SEO and Public Content
