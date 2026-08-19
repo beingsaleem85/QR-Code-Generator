@@ -28,7 +28,7 @@ Allowed status: `NOT STARTED`, `IN PROGRESS`, `COMPLETE`, `BLOCKED_EXTERNAL`, `R
 - Severity: MEDIUM
 - Reproduction: code-level gap — `deleteQrCode` fetches asset rows, deletes the `qr_codes` row, then removes Storage objects, then deletes `qr_assets` rows, as separate sequential steps with no transactional guarantee; a failure between steps could orphan a file. Confirmed clean on the happy path (Step 5 era testing and the original audit both), no live defect reproduced — this is a defense-in-depth gap, not an observed failure.
 - Dependency: none
-- Status: NOT STARTED
+- Status: **COMPLETE** — commit `79cac86` reorders `deleteQrCode` to remove Storage objects + `qr_assets` rows before the `qr_codes` row, checking each Storage call's result and stopping (leaving everything intact, safe error) if it fails, instead of deleting the row regardless. Unit tests: new case confirms a Storage failure leaves the QR row untouched and never leaks the raw error. Live-verified on production (Vercel `m3axdq9de`): happy-path delete of a file-backed QR still fully cleans up the Storage object, the `qr_assets` row, and the `qr_codes` row, in that order.
 
 ### P-04 — Post-delete UX from a QR's own detail page
 - Area: V. Delete QR
@@ -36,7 +36,7 @@ Allowed status: `NOT STARTED`, `IN PROGRESS`, `COMPLETE`, `BLOCKED_EXTERNAL`, `R
 - Severity: LOW
 - Reproduction: delete a QR from `/dashboard/qr-codes/[id]` (its own detail page, not the list) — the page just refreshes in place and renders not-found, instead of returning to `/dashboard/qr-codes`.
 - Dependency: none
-- Status: NOT STARTED
+- Status: **COMPLETE** — commit `a43dec5` adds an optional `redirectAfterDeleteTo` prop to `QRCodeRowActions`, set only by the QR detail page (`/dashboard/qr-codes`); list/card usage is unchanged. Live-verified on production (Vercel `hc4yj4ap3`): deleting from a QR's own detail page now redirects to the list with no "Page not found" flash; deleting from the list page itself still behaves exactly as before (no regression).
 
 ### P-05 — Invalid URL handling
 - Area: Error states

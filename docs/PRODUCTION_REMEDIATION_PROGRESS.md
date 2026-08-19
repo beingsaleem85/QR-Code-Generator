@@ -97,8 +97,13 @@ IN PROGRESS
 - Status: **COMPLETE**
 
 ### STEP 6 — 35 PARTIAL audit items
-- Queue: `docs/PARTIAL_REMEDIATION_QUEUE.md` (not yet created)
-- Status: **NOT STARTED**
+- Queue: `docs/PARTIAL_REMEDIATION_QUEUE.md` (frozen, commit `6d462cd`)
+- P-01 (Feedback save): RESOLVED_BY_PRIOR_STEP (Step 3, commit `ba115fb`)
+- P-02 (Email/SMTP delivery): BLOCKED_EXTERNAL — see queue file for the exact owner action needed
+- P-03 (orphan Storage on partial delete failure): COMPLETE — commit `79cac86`, Vercel `m3axdq9de`, production-verified
+- P-04 (post-delete UX from detail page): COMPLETE — commit `a43dec5`, Vercel `hc4yj4ap3`, production-verified
+- P-05 through P-35: IN PROGRESS — see `docs/PARTIAL_REMEDIATION_QUEUE.md` for live status of each
+- Status: **IN PROGRESS**
 
 ### FINAL STEP — Complete re-audit
 - Status: **NOT STARTED**
