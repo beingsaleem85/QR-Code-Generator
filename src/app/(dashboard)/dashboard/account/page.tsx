@@ -1,7 +1,7 @@
 import { AccountProfileForm } from "@/components/account/AccountProfileForm";
+import { ChangePasswordForm } from "@/components/account/ChangePasswordForm";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { Avatar } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { getMyEntitlement, planLabel } from "@/lib/account/entitlements";
 import { getMyProfile, resolveDisplayLabel } from "@/lib/account/profile";
@@ -65,16 +65,9 @@ export default async function AccountPage() {
           </div>
         </Card>
 
-        <Card className="flex flex-col gap-3 p-5">
+        <Card className="flex flex-col gap-4 p-5">
           <p className="text-sm font-medium text-foreground">Password &amp; security</p>
-          <p className="text-xs text-muted-foreground">
-            Password changes aren&apos;t available from this page yet.
-          </p>
-          <div>
-            <Button variant="secondary" disabled>
-              Change password
-            </Button>
-          </div>
+          <ChangePasswordForm />
         </Card>
       </div>
     </div>
