@@ -193,6 +193,9 @@ export function QRGeneratorShell({
     router.refresh();
   };
 
+  const saveLabel = saving ? "Saving..." : variant === "edit" ? "Save Changes" : "Save QR";
+  const saveDisabled = saving || (variant === "edit" && !isDirty);
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -206,21 +209,10 @@ export function QRGeneratorShell({
             </span>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={saving || (variant === "edit" && !isDirty)}
-          >
-            {saving ? "Saving..." : variant === "edit" ? "Save Changes" : "Save QR"}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleReset} disabled={saving}>
-            Reset
-          </Button>
-        </div>
+        <Button variant="ghost" size="sm" onClick={handleReset} disabled={saving}>
+          Reset
+        </Button>
       </div>
-
-      {saveError ? <Alert variant="error">{saveError}</Alert> : null}
 
       <div className="flex flex-wrap items-end gap-4">
         <QRModeToggle mode={mode} onModeChange={handleModeChange} />
@@ -263,6 +255,27 @@ export function QRGeneratorShell({
             publicToken={initialPublicToken}
           />
         </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-surface p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">QR ready</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {variant === "edit"
+                ? "Save your changes to update this QR code."
+                : "Everything above is saved to your account once you save."}
+            </p>
+          </div>
+          <Button className="w-full sm:w-auto" onClick={handleSave} disabled={saveDisabled}>
+            {saveLabel}
+          </Button>
+        </div>
+        {saveError ? (
+          <div className="mt-3">
+            <Alert variant="error">{saveError}</Alert>
+          </div>
+        ) : null}
       </div>
     </div>
   );
