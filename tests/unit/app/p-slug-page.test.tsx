@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
 const resolveLandingPage = vi.fn();
-const resolvePdfDirectOpenUrl = vi.fn();
 const recordQrScan = vi.fn();
 const notFound = vi.fn(() => {
   throw new Error("NEXT_NOT_FOUND");
@@ -13,7 +12,6 @@ const after = vi.fn((callback: () => unknown) => callback());
 const headersMock = vi.fn();
 
 vi.mock("@/server/services/landing-page-resolution", () => ({ resolveLandingPage }));
-vi.mock("@/server/services/pdf-direct-open", () => ({ resolvePdfDirectOpenUrl }));
 vi.mock("@/lib/qr/scan-tracking", () => ({ recordQrScan }));
 vi.mock("next/navigation", () => ({ notFound }));
 vi.mock("next/server", async () => {
@@ -22,14 +20,14 @@ vi.mock("next/server", async () => {
 });
 vi.mock("next/headers", () => ({ headers: headersMock }));
 
-// The other landing-page components (and PdfDirectOpenRedirect itself)
-// aren't the concern of this test file — stub each to a simple,
-// identifiable marker so assertions can check *which* component the page
-// chose to render without depending on any of their own internals (several
-// make their own Storage/signing calls, and PdfDirectOpenRedirect's own
-// meta-refresh/script behavior is covered separately).
-vi.mock("@/components/landing/PdfDirectOpenRedirect", () => ({
-  PdfDirectOpenRedirect: ({ url }: { url: string }) => `PdfDirectOpenRedirect:${url}`,
+// Stub every landing-page/viewer component to a simple, identifiable
+// marker so assertions can check *which* component the page chose to
+// render without depending on its own internals (several make their own
+// Storage/signing calls, and PdfViewer's own pdf.js behavior is covered
+// separately in tests/unit/components/PdfViewer.test.tsx).
+vi.mock("@/components/landing/pdf-viewer/PdfViewer", () => ({
+  PdfViewer: ({ slug, fileName }: { slug: string; fileName: string }) =>
+    `PdfViewer:${slug}:${fileName}`,
 }));
 vi.mock("@/components/landing/PdfLandingPage", () => ({
   PdfLandingPage: () => "PdfLandingPage",
@@ -67,15 +65,13 @@ function makeParams(slug: string) {
   return { params: Promise.resolve({ slug }) };
 }
 
-describe("/p/[slug] — PDF direct-open", () => {
-  it("renders the PDF landing page when openDirectly resolves to no URL (off, or missing on an older record)", async () => {
+describe("/p/[slug] — PDF direct-open viewer routing", () => {
+  it("renders the PDF landing page when openDirectly is off", async () => {
     resolveLandingPage.mockResolvedValue({
       status: "ok",
       qrType: "pdf",
-      payloadData: { path: "u/a/menu.pdf", openDirectly: false },
+      payloadData: { path: "u/a/menu.pdf", fileName: "menu.pdf", openDirectly: false },
     });
-    resolvePdfDirectOpenUrl.mockResolvedValue(null);
-    headersMock.mockResolvedValue(new Headers());
     const { default: LandingPage } = await import("@/app/p/[slug]/page");
 
     const result = await LandingPage(makeParams("abc12345"));
@@ -85,31 +81,54 @@ describe("/p/[slug] — PDF direct-open", () => {
     expect(recordQrScan).not.toHaveBeenCalled();
   });
 
-  it("renders PdfDirectOpenRedirect with the resolved file URL when openDirectly is on", async () => {
+  it("renders the PdfLandingPage for a record predating the field (openDirectly missing)", async () => {
     resolveLandingPage.mockResolvedValue({
       status: "ok",
       qrType: "pdf",
-      payloadData: { path: "u/a/menu.pdf", openDirectly: true },
+      payloadData: { path: "u/a/menu.pdf", fileName: "menu.pdf" },
     });
-    resolvePdfDirectOpenUrl.mockResolvedValue("https://storage.example/signed?token=abc");
-    headersMock.mockResolvedValue(new Headers());
     const { default: LandingPage } = await import("@/app/p/[slug]/page");
 
     const result = await LandingPage(makeParams("abc12345"));
     render(result);
 
-    expect(
-      screen.getByText("PdfDirectOpenRedirect:https://storage.example/signed?token=abc"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("PdfLandingPage")).toBeInTheDocument();
   });
 
-  it("records a scan (referrer, user-agent, edge country) on the direct-open path, without delaying the render", async () => {
+  it("renders the in-app PdfViewer (never an external URL) when openDirectly is on", async () => {
     resolveLandingPage.mockResolvedValue({
       status: "ok",
       qrType: "pdf",
-      payloadData: { path: "u/a/menu.pdf", openDirectly: true },
+      payloadData: { path: "u/a/menu.pdf", fileName: "menu.pdf", openDirectly: true },
     });
-    resolvePdfDirectOpenUrl.mockResolvedValue("https://storage.example/signed?token=abc");
+    const { default: LandingPage } = await import("@/app/p/[slug]/page");
+
+    const result = await LandingPage(makeParams("abc12345"));
+    render(result);
+
+    expect(screen.getByText("PdfViewer:abc12345:menu.pdf")).toBeInTheDocument();
+  });
+
+  it("falls back to the landing page when openDirectly is on but no file has been uploaded yet", async () => {
+    resolveLandingPage.mockResolvedValue({
+      status: "ok",
+      qrType: "pdf",
+      payloadData: { openDirectly: true },
+    });
+    const { default: LandingPage } = await import("@/app/p/[slug]/page");
+
+    const result = await LandingPage(makeParams("abc12345"));
+    render(result);
+
+    expect(screen.getByText("PdfLandingPage")).toBeInTheDocument();
+  });
+
+  it("records a scan (referrer, user-agent, edge country) once for the direct-open path", async () => {
+    resolveLandingPage.mockResolvedValue({
+      status: "ok",
+      qrType: "pdf",
+      payloadData: { path: "u/a/menu.pdf", fileName: "menu.pdf", openDirectly: true },
+    });
     headersMock.mockResolvedValue(
       new Headers({
         referer: "https://google.com",
@@ -122,6 +141,7 @@ describe("/p/[slug] — PDF direct-open", () => {
     await LandingPage(makeParams("abc12345"));
 
     expect(after).toHaveBeenCalledOnce();
+    expect(recordQrScan).toHaveBeenCalledOnce();
     expect(recordQrScan).toHaveBeenCalledWith("abc12345", {
       referrer: "https://google.com",
       userAgent: "TestAgent/1.0",
@@ -129,7 +149,7 @@ describe("/p/[slug] — PDF direct-open", () => {
     });
   });
 
-  it("never resolves a direct-open URL for a paused/archived QR — the inactive check runs first", async () => {
+  it("never renders the viewer or records a scan for a paused/archived QR — the inactive check runs first", async () => {
     resolveLandingPage.mockResolvedValue({ status: "inactive" });
     const { default: LandingPage } = await import("@/app/p/[slug]/page");
 
@@ -137,20 +157,19 @@ describe("/p/[slug] — PDF direct-open", () => {
     render(result);
 
     expect(screen.getByText(/QR code isn.t active/i)).toBeInTheDocument();
-    expect(resolvePdfDirectOpenUrl).not.toHaveBeenCalled();
+    expect(screen.queryByText(/PdfViewer:/)).not.toBeInTheDocument();
     expect(recordQrScan).not.toHaveBeenCalled();
   });
 
-  it("calls notFound for an unknown slug without ever touching direct-open resolution", async () => {
+  it("calls notFound for an unknown slug", async () => {
     resolveLandingPage.mockResolvedValue({ status: "not_found" });
     const { default: LandingPage } = await import("@/app/p/[slug]/page");
 
     await expect(LandingPage(makeParams("nope"))).rejects.toThrow("NEXT_NOT_FOUND");
-    expect(resolvePdfDirectOpenUrl).not.toHaveBeenCalled();
   });
 });
 
-describe("/p/[slug] — other hosted types are unaffected by the PDF direct-open change", () => {
+describe("/p/[slug] — other hosted types are unaffected by the PDF viewer change", () => {
   it.each([
     ["images", "GalleryLandingPage"],
     ["audio", "AudioLandingPage"],
@@ -159,17 +178,13 @@ describe("/p/[slug] — other hosted types are unaffected by the PDF direct-open
     ["social", "SocialLandingPage"],
     ["multi_link", "MultiLinkLandingPage"],
     ["menu", "MenuLandingPage"],
-  ])(
-    "renders the normal %s landing page, never consulting PDF direct-open resolution",
-    async (qrType, marker) => {
-      resolveLandingPage.mockResolvedValue({ status: "ok", qrType, payloadData: {} });
-      const { default: LandingPage } = await import("@/app/p/[slug]/page");
+  ])("renders the normal %s landing page unaffected", async (qrType, marker) => {
+    resolveLandingPage.mockResolvedValue({ status: "ok", qrType, payloadData: {} });
+    const { default: LandingPage } = await import("@/app/p/[slug]/page");
 
-      const result = await LandingPage(makeParams("abc12345"));
-      render(result);
+    const result = await LandingPage(makeParams("abc12345"));
+    render(result);
 
-      expect(screen.getByText(marker)).toBeInTheDocument();
-      expect(resolvePdfDirectOpenUrl).not.toHaveBeenCalled();
-    },
-  );
+    expect(screen.getByText(marker)).toBeInTheDocument();
+  });
 });

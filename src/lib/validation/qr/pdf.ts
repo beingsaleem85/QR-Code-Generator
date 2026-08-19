@@ -14,9 +14,10 @@ export const pdfQrSchema = z.object({
   sizeBytes: z.number().nonnegative(),
   mimeType: z.literal("application/pdf"),
   /**
-   * When true, `/p/[slug]` skips the landing page and redirects the
-   * scanner straight to the current PDF asset instead (see
-   * `resolvePdfDirectOpenUrl`, `src/server/services/pdf-direct-open.ts`).
+   * When true, `/p/[slug]` skips the landing page and renders the
+   * full-screen in-app `PdfViewer` instead (see
+   * `src/components/landing/pdf-viewer/PdfViewer.tsx`, which loads the
+   * current PDF from the same-origin `/api/public-pdf/[slug]` proxy).
    * Optional + defaulted so an existing record's `payload_data` — saved
    * before this field existed — parses to `false` with no migration/
    * backfill needed, exactly the same "missing means off" behavior as if
