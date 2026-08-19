@@ -16,7 +16,7 @@ Starting commit: `ea64621` (audit report)
 
 ## Current Step
 
-STEP 3 — Feedback QR default-values/save bug
+STEP 4 — 2D Barcode / Location UX + internal doc leak
 
 ## Status
 
@@ -54,7 +54,18 @@ IN PROGRESS
 - Status: **COMPLETE**
 
 ### STEP 3 — Feedback QR default-values/save bug
-- Status: **NOT STARTED**
+- Audit item: E./J./K. Feedback QR — PARTIAL/FAIL, "cannot save without touching a field despite valid defaults"
+- Reproduced first on production before any code change: confirmed via commit `ba115fb`'s prior deployed code (Feedback → Save immediately, no field touched → "Fix the content errors above before saving.").
+- Root cause: `FeedbackForm`'s `defaultValues` (title "How was your experience?", both collect toggles) are already fully valid on their own, but `useEffect(() => watch((values) => onChange(values)), [watch, onChange])` only fires on a field-level change event — react-hook-form never calls the watch callback with its own initial `defaultValues` on mount. The parent's `content` state stayed whatever it was before this form ever rendered (`{}` for a fresh QR) until the user edited something, so an untouched Save submitted stale/empty content and failed server-side validation with a generic, non-specific error.
+- Fix: `onChange(getValues())` is now called once on mount, in addition to the existing watch-driven updates for subsequent edits, so the parent always has content matching what's actually displayed. Scoped to Feedback only, per the explicit step boundary — the same `watch()`-without-mount-sync pattern exists in several other content forms (App, Social, Event, Text, Url, Video, Wifi, PhoneMessageFields per grep), but none of the others have a fully-valid all-default state the way Feedback does, so they don't currently exhibit the same user-facing failure; noted here for awareness, not fixed.
+- Focused tests: `tests/unit/components/FeedbackForm.test.tsx` (new) — 4/4 pass (onChange fires valid content on mount, mounted defaults match what's displayed, edits still propagate, pre-existing `value` in edit mode isn't overwritten by defaults).
+- Full suite: 642/642 pass.
+- TypeScript: pass. ESLint: pass (0 errors, same pre-existing `watch()` library warning already present on 11 other files). Prettier: pass. Production build: pass. Secret scan: clean.
+- Commit SHA: `ba115fb` — "Fix Feedback QR: saving with untouched (already-valid) defaults always failed"
+- Vercel deployment: `qp19b1x2a` — READY, aliased to qrforge.space
+- Production verification: untouched-defaults Feedback QR now saves immediately; public `/p/[slug]` page still opens with the default prompt; anonymous submission still reaches the database (confirmed via the owner's detail page showing "Feedback (1)"); editing a field before saving still works (no regression). All confirmed live with a temporary account.
+- Cleanup: temp account deleted; `mailer_autoconfirm` restored to `false`.
+- Status: **COMPLETE**
 
 ### STEP 4 — 2D Barcode / Location UX + internal doc leak
 - Status: **NOT STARTED**
