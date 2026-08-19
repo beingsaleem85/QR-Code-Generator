@@ -16,7 +16,7 @@ Starting commit: `ea64621` (audit report)
 
 ## Current Step
 
-STEP 5 — Database-level Dynamic QR quota enforcement
+STEP 6 — 35 PARTIAL audit items
 
 ## Status
 
@@ -82,7 +82,19 @@ IN PROGRESS
 - Status: **COMPLETE**
 
 ### STEP 5 — Database-level Dynamic QR quota enforcement
-- Status: **NOT STARTED**
+- Audit item: G. Dynamic QR — "Quota enforcement (DB layer) FAIL (gap)"; confirmed bug #4
+- Inspected: `account_entitlements.dynamic_qr_limit` (NULL = unlimited, no configured cap today), `checkDynamicQrAllowance` (app-level, in `src/lib/qr/actions.ts`), `countDynamicQrCodes()`'s exact counting rule (`mode = 'dynamic' AND status <> 'archived'`), and all three write paths that allocate a dynamic QR (`saveQrCode`, `updateQrCode`'s static→dynamic conversion, `duplicateQrCode`) — all funnel through a plain insert/update on `qr_codes`.
+- Fix: new migration `supabase/migrations/20260822110000_enforce_dynamic_qr_quota.sql` — a `BEFORE INSERT OR UPDATE ON qr_codes` trigger (`enforce_dynamic_qr_quota()`) that re-checks the same limit at the database boundary, covering every write path with one semantic source rather than three separately-kept-in-sync checks. `src/lib/qr/actions.ts` translates the trigger's rejection into the existing safe "reached your plan's limit" message at all three call sites, never surfacing the raw exception.
+- **Bug found and fixed during this step's own live verification** (not a separate audit item — see commit `e85242e`): the first version used `select ... for update` on `account_entitlements` to serialize concurrent requests. Live testing (first with 5 *sequential*, non-concurrent inserts — deliberately isolating the check from concurrency to diagnose cleanly) showed the limit wasn't enforced at all. Root cause: Postgres requires an UPDATE-permitting RLS policy to lock a row via `FOR UPDATE`, even to just lock without writing — `account_entitlements` deliberately has no UPDATE policy (by design, so no client can ever write to it), so the locking SELECT silently returned zero rows under RLS regardless of the row's actual existence, and the trigger read that as "unlimited" every time. Confirmed via a temporary debug version of the trigger that force-raised with the resolved variables — the row demonstrably existed and `auth.uid()` matched, yet `FOUND` was false specifically for the `FOR UPDATE` variant. Fixed by replacing the row lock with a transaction-scoped advisory lock (`pg_advisory_xact_lock(hashtextextended(user_id, 0))`), which isn't subject to any table's RLS policies. Re-verified: 5 sequential inserts against a limit of 3 now correctly succeed/reject 3/2; this was caught and fixed *before* the step was recorded as complete, per the strict gate.
+- Applied to the live Supabase project via `supabase db push` (initial version) and a direct SQL apply for the correction (same file, `create or replace function` is idempotent — the committed migration file and the live database now match).
+- Focused tests: `tests/unit/qr/actions.test.ts` (+3 new: `saveQrCode`/`updateQrCode`/`duplicateQrCode` each translate the trigger's raw exception into the safe message, never leaking `DYNAMIC_QR_QUOTA_EXCEEDED` or the Postgres error code) — 38/38 pass. No local Postgres/Docker is available in this environment (pre-existing, documented project constraint) to unit-test the trigger's own SQL directly — production verification is the real proof for the DB-level behavior, exactly as this project's own established testing practice already does for RLS/trigger work.
+- Full suite: 649/649 pass.
+- TypeScript: pass. ESLint: pass (0 errors). Prettier: pass. Production build: pass. Secret scan: clean.
+- Commit SHAs: `d8c8ab0` — "Harden Dynamic QR quota enforcement at the database boundary" (initial); `e85242e` — "Fix Dynamic QR quota trigger: FOR UPDATE silently found no rows under RLS" (the correction, found via this step's own live verification)
+- Vercel deployment: `bsl4bvoo8` (for `e85242e`) — READY, aliased to qrforge.space
+- Production verification: **concurrency** — 8 simultaneous dynamic-QR-insert attempts against a temporary account with `dynamic_qr_limit = 3` resulted in exactly 3 successes and 5 rejections (confirmed via a direct database row count, not just client responses) — the race condition genuinely cannot exceed the limit. **Unlimited** — raising the same account's limit back to `NULL` immediately allowed further creation. **Real UI** — 2 dynamic QRs created successfully through the actual `/dashboard/qr-codes/new` form, a 3rd correctly blocked with the existing safe message, no false navigation. **Security** — the same temporary account could not write its own `account_entitlements` row (0 rows affected on an attempted self-escalation to `plan: "pro"`/unlimited). **Permanent account** — read-only confirmed unchanged (`plan=pro, is_lifetime=true, expires_at=null, dynamic_qr_limit=null`, `last_sign_in_at` untouched).
+- Cleanup: all temporary accounts deleted (including two intentionally left over from mid-diagnosis inspection, swept afterward); `mailer_autoconfirm` restored to `false`.
+- Status: **COMPLETE**
 
 ### STEP 6 — 35 PARTIAL audit items
 - Queue: `docs/PARTIAL_REMEDIATION_QUEUE.md` (not yet created)
