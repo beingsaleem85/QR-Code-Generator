@@ -64,6 +64,28 @@ describe("QRTypeSelector", () => {
     expect(screen.getByRole("option", { name: "2D Barcode" })).toBeInTheDocument();
   });
 
+  it("renders not-yet-implemented types disabled with a Coming soon badge, never clickable", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    const onTypeChange = vi.fn();
+    render(<QRTypeSelector mode="static" selectedType="url" onTypeChange={onTypeChange} />);
+
+    const barcodeOption = screen.getByRole("option", { name: "2D Barcode" });
+    expect(barcodeOption).toBeDisabled();
+    expect(within(barcodeOption).getByText("Coming soon")).toBeInTheDocument();
+    expect(within(barcodeOption).queryByText("Dynamic")).not.toBeInTheDocument();
+
+    await user.click(barcodeOption);
+    expect(onTypeChange).not.toHaveBeenCalled();
+  });
+
+  it("renders Location disabled with a Coming soon badge in dynamic mode too", () => {
+    render(<QRTypeSelector mode="dynamic" selectedType="url" onTypeChange={vi.fn()} />);
+    const locationOption = screen.getByRole("option", { name: "Location" });
+    expect(locationOption).toBeDisabled();
+    expect(within(locationOption).getByText("Coming soon")).toBeInTheDocument();
+  });
+
   it("calls onTypeChange with the clicked type's key", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();

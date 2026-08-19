@@ -16,10 +16,14 @@ export function QRContentPanel({ qrType, value, onChange }: QRContentPanelProps)
   const ContentForm = CONTENT_FORMS[qrType];
 
   if (!ContentForm) {
+    // Defense-in-depth only — QRTypeSelector renders not-yet-implemented
+    // types (currently 2D Barcode, Location) as disabled with a "Coming
+    // soon" badge, so a real user can't reach this. No internal file paths
+    // or development terminology, in case it's ever reached some other way.
     return (
       <Placeholder
-        label={`${definition.label} content`}
-        description="This QR type needs Supabase Storage or a hosted landing page — its content form arrives with that module (see docs/ARCHITECTURE.md, QR Domain Model)."
+        label={`${definition.label} — coming soon`}
+        description="This QR type isn't available to create yet."
       />
     );
   }

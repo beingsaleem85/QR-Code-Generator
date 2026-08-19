@@ -16,8 +16,12 @@ interface QRTypeSelectorProps {
  * if it's a real, implemented dynamic-only type — kept discoverable rather
  * than hidden, since selecting it switches the builder to dynamic for you
  * (QRGeneratorShell's `handleTypeChange`). Not-yet-implemented types
- * (`barcode_2d`/`location`) are untouched by this — they're unaffected
- * since both already have `staticSupport: true`.
+ * (`barcode_2d`/`location` — no defined product spec exists for either
+ * one, see docs/PRODUCTION_REMEDIATION_PROGRESS.md Step 4) still appear
+ * here for the same reason `/qr-types` shows them in its "Coming soon"
+ * section rather than hiding them outright, but are rendered disabled with
+ * a "Coming soon" badge instead of being clickable — selecting either used
+ * to fall through to QRContentPanel's generic placeholder.
  */
 export function QRTypeSelector({ mode, selectedType, onTypeChange }: QRTypeSelectorProps) {
   const types = listQrTypeDefinitions().filter((definition) => {
@@ -38,6 +42,7 @@ export function QRTypeSelector({ mode, selectedType, onTypeChange }: QRTypeSelec
         const Icon = QR_TYPE_ICONS[definition.icon];
         const selected = selectedType === definition.key;
         const dynamicOnly = !definition.staticSupport;
+        const comingSoon = CONTENT_FORMS[definition.key] == null;
 
         return (
           <button
@@ -45,15 +50,26 @@ export function QRTypeSelector({ mode, selectedType, onTypeChange }: QRTypeSelec
             type="button"
             role="option"
             aria-selected={selected}
-            title={definition.label}
-            onClick={() => onTypeChange(definition.key)}
+            aria-disabled={comingSoon}
+            disabled={comingSoon}
+            title={comingSoon ? `${definition.label} — coming soon` : definition.label}
+            onClick={comingSoon ? undefined : () => onTypeChange(definition.key)}
             className={`relative flex flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-center transition-colors ${
-              selected
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-surface text-foreground hover:border-primary hover:text-primary"
+              comingSoon
+                ? "cursor-not-allowed border-border bg-surface text-muted-foreground opacity-60"
+                : selected
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-surface text-foreground hover:border-primary hover:text-primary"
             }`}
           >
-            {dynamicOnly ? (
+            {comingSoon ? (
+              <span
+                aria-hidden="true"
+                className="absolute top-1 right-1 rounded-full border border-border bg-background px-1.5 py-0.5 text-[9px] leading-none font-semibold tracking-wide text-muted-foreground uppercase"
+              >
+                Coming soon
+              </span>
+            ) : dynamicOnly ? (
               // aria-hidden: purely a visual hint — the option's own
               // accessible name must stay exactly the type label (e.g.
               // "PDF"), not "Dynamic PDF", since every caller (this app's
