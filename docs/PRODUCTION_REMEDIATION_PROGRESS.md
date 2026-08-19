@@ -16,7 +16,7 @@ Starting commit: `ea64621` (audit report)
 
 ## Current Step
 
-STEP 4 — 2D Barcode / Location UX + internal doc leak
+STEP 5 — Database-level Dynamic QR quota enforcement
 
 ## Status
 
@@ -68,7 +68,18 @@ IN PROGRESS
 - Status: **COMPLETE**
 
 ### STEP 4 — 2D Barcode / Location UX + internal doc leak
-- Status: **NOT STARTED**
+- Audit item: E. QR type inventory — 2D Barcode/Location, FAIL, "leaks internal doc reference"
+- Product-state investigation (per explicit instruction not to invent semantics): checked `docs/ARCHITECTURE.md`, `QR_Code_Generator_Master_Build_Prompt.md`, `docs/WORKLOG.md`, `docs/SESSION_HANDOFF.md`, `docs/FINAL_REPORT.md`, and the registry. No product specification exists anywhere for either type — the master prompt itself only lists "2D Barcode / structured product data" and "Location" as bare menu items, with no symbology, data format, or field schema ever defined. Confirmed genuinely not-implemented, not merely hidden.
+- Root cause: both `barcode_2d` (`staticSupport: true`) and `location` (`staticSupport: true, dynamicSupport: true`) passed `QRTypeSelector`'s filter as ordinary clickable options despite having no real content form. Selecting either rendered `QRContentPanel`'s generic fallback, whose description read "...its content form arrives with that module (see docs/ARCHITECTURE.md, QR Domain Model)" — a raw internal documentation path shown to real users.
+- Fix: `QRTypeSelector` now renders any type without a real content form (`CONTENT_FORMS[key] == null` — the same check `/qr-types` already uses to sort into its own "Coming soon" section) as `disabled` with a "Coming soon" badge, consistent with the marketing page, and never calls `onTypeChange` for it. `QRContentPanel`'s fallback text was also cleaned up as defense-in-depth (generic "coming soon" wording, no file paths/module references), in case it's ever reached another way.
+- Focused tests: `tests/unit/components/QRTypeSelector.test.tsx` (+2 new: disabled + badge + no-click for both static and dynamic mode) and `tests/unit/components/QRContentPanel.test.tsx` (new, 2 tests: real type still works, not-yet-implemented type shows no internal references) — 11/11 pass.
+- Full suite: 646/646 pass.
+- TypeScript: pass. ESLint: pass (0 errors). Prettier: pass. Production build: pass. Secret scan: clean.
+- Commit SHA: `155c747` — "Mark 2D Barcode / Location as Coming soon in the generator, remove the internal doc leak"
+- Vercel deployment: `gneb6f0uo` — READY, aliased to qrforge.space
+- Production verification: both options render disabled with a "Coming soon" badge (desktop, anonymous flow, no account needed) in both static and dynamic mode; a forced click still cannot select either or reach any internal reference; the marketing page (`/qr-types`) stays consistent; a real implemented type (URL) is unaffected. All 8 checks confirmed live.
+- Cleanup: no temporary account was needed (anonymous `/qr-generator` flow).
+- Status: **COMPLETE**
 
 ### STEP 5 — Database-level Dynamic QR quota enforcement
 - Status: **NOT STARTED**
