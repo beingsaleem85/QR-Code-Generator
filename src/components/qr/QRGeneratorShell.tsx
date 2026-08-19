@@ -14,12 +14,34 @@ import { Button } from "@/components/ui/Button";
 import { AUTH_REQUIRED } from "@/lib/qr/action-types";
 import { saveQrCode, updateQrCode } from "@/lib/qr/actions";
 import { stashDraft } from "@/lib/qr/draft-storage";
-import { listQrTypeDefinitions } from "@/lib/qr/registry";
+import { getQrTypeDefinition, listQrTypeDefinitions } from "@/lib/qr/registry";
 import { DEFAULT_DESIGN_CONFIG } from "@/types/qr-design";
 import type { DesignConfig } from "@/types/qr-design";
 import type { QRMode, QRType } from "@/types/qr";
 
 const INITIAL_TYPE: QRType = "url";
+
+/**
+ * Shown under the type selector when the active type is dynamic-only, so a
+ * user who lands on one of these (via a click-triggered mode switch, or by
+ * opening a saved QR that already has one) understands why Dynamic mode is
+ * in effect rather than discovering it only by trial and error.
+ */
+const DYNAMIC_ONLY_REASON: Partial<Record<QRType, string>> = {
+  pdf: "PDF QR codes use Dynamic mode so you can replace the PDF later without changing the printed QR code.",
+  images:
+    "Image gallery QR codes use Dynamic mode so you can update the photos later without changing the printed QR code.",
+  audio:
+    "Audio QR codes use Dynamic mode so you can replace the audio file later without changing the printed QR code.",
+  app: "App Store / Play Store QR codes use Dynamic mode so they can host a device-aware landing page you can update anytime.",
+  social:
+    "Social Media QR codes use Dynamic mode so your hosted profile page can be updated anytime without changing the printed QR code.",
+  multi_link:
+    "Multiple Links QR codes use Dynamic mode so your hosted links page can be updated anytime without changing the printed QR code.",
+  menu: "Menu QR codes use Dynamic mode so you can update your menu anytime without changing the printed QR code.",
+  feedback:
+    "Feedback QR codes use Dynamic mode since they collect submissions through a hosted page.",
+};
 
 function firstSupportedType(mode: QRMode): QRType {
   const supported = listQrTypeDefinitions().filter((definition) =>
@@ -117,6 +139,16 @@ export function QRGeneratorShell({
   };
 
   const handleTypeChange = (nextType: QRType) => {
+    // Dynamic-only types (PDF, Images, Audio, App, Social, Multi-Link, Menu,
+    // Feedback) stay visible in the type selector even while Static is
+    // selected (QRTypeSelector) — picking one here switches the mode along
+    // with the type, rather than requiring the user to discover and click
+    // "Dynamic" first. `firstSupportedType`'s reset path in
+    // `handleModeChange` isn't invoked here since the target type is always
+    // dynamic-compatible by construction.
+    if (!getQrTypeDefinition(nextType).staticSupport && mode === "static") {
+      setMode("dynamic");
+    }
     setQrType(nextType);
     setContent({});
   };
@@ -191,6 +223,10 @@ export function QRGeneratorShell({
       </div>
 
       <QRTypeSelector mode={mode} selectedType={qrType} onTypeChange={handleTypeChange} />
+
+      {DYNAMIC_ONLY_REASON[qrType] ? (
+        <Alert variant="info">{DYNAMIC_ONLY_REASON[qrType]}</Alert>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
         <div className="flex flex-col gap-4">
