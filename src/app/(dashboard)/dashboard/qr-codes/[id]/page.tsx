@@ -110,6 +110,15 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
               </div>
             ) : null}
 
+            {qrCode.qrType === "pdf" ? (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase">Scan behavior</p>
+                <p className="text-sm text-foreground">
+                  {qrCode.payloadData.openDirectly === true ? "Direct PDF" : "Landing page"}
+                </p>
+              </div>
+            ) : null}
+
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase">Created</p>

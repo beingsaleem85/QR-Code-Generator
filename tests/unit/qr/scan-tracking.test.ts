@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(),
 }));
 
@@ -10,8 +10,8 @@ afterEach(() => {
 });
 
 async function loadScanTracking(supabaseClient: unknown) {
-  const { createClient } = await import("@/lib/supabase/server");
-  vi.mocked(createClient).mockResolvedValue(supabaseClient as never);
+  const { createClient } = await import("@supabase/supabase-js");
+  vi.mocked(createClient).mockReturnValue(supabaseClient as never);
   return import("@/lib/qr/scan-tracking");
 }
 
@@ -64,13 +64,29 @@ describe("recordQrScan", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("never throws when createClient itself rejects", async () => {
-    const { createClient } = await import("@/lib/supabase/server");
-    vi.mocked(createClient).mockRejectedValue(new Error("no cookies context"));
+  it("never throws when createClient itself throws", async () => {
+    const { createClient } = await import("@supabase/supabase-js");
+    vi.mocked(createClient).mockImplementation(() => {
+      throw new Error("bad client config");
+    });
     const { recordQrScan } = await import("@/lib/qr/scan-tracking");
 
     await expect(
       recordQrScan("abc12345", { referrer: null, userAgent: null, countryCode: null }),
     ).resolves.toBeUndefined();
+  });
+
+  it("builds a plain anon-key client, not the cookie-bound server client — after() throws on cookies() in a Server Component", async () => {
+    const rpc = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const { createClient } = await import("@supabase/supabase-js");
+    vi.mocked(createClient).mockReturnValue({ rpc } as never);
+    const { recordQrScan } = await import("@/lib/qr/scan-tracking");
+
+    await recordQrScan("abc12345", { referrer: null, userAgent: null, countryCode: null });
+
+    expect(createClient).toHaveBeenCalledWith(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    );
   });
 });

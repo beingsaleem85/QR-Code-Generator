@@ -36,6 +36,54 @@ describe("pdfQrSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  describe("openDirectly (PDF direct-open)", () => {
+    it("defaults to false when omitted — existing records without this field behave as landing-page mode", () => {
+      const result = pdfQrSchema.safeParse({
+        path: "user-1/asset-1/menu.pdf",
+        fileName: "menu.pdf",
+        sizeBytes: 12345,
+        mimeType: "application/pdf",
+      });
+      expect(result.success).toBe(true);
+      expect(result.success && result.data.openDirectly).toBe(false);
+    });
+
+    it("accepts an explicit true", () => {
+      const result = pdfQrSchema.safeParse({
+        path: "user-1/asset-1/menu.pdf",
+        fileName: "menu.pdf",
+        sizeBytes: 12345,
+        mimeType: "application/pdf",
+        openDirectly: true,
+      });
+      expect(result.success).toBe(true);
+      expect(result.success && result.data.openDirectly).toBe(true);
+    });
+
+    it("accepts an explicit false", () => {
+      const result = pdfQrSchema.safeParse({
+        path: "user-1/asset-1/menu.pdf",
+        fileName: "menu.pdf",
+        sizeBytes: 12345,
+        mimeType: "application/pdf",
+        openDirectly: false,
+      });
+      expect(result.success).toBe(true);
+      expect(result.success && result.data.openDirectly).toBe(false);
+    });
+
+    it("rejects a non-boolean value", () => {
+      const result = pdfQrSchema.safeParse({
+        path: "user-1/asset-1/menu.pdf",
+        fileName: "menu.pdf",
+        sizeBytes: 12345,
+        mimeType: "application/pdf",
+        openDirectly: "yes",
+      });
+      expect(result.success).toBe(false);
+    });
+  });
 });
 
 describe("buildPdfPayload", () => {
@@ -46,6 +94,19 @@ describe("buildPdfPayload", () => {
         fileName: "menu.pdf",
         sizeBytes: 1,
         mimeType: "application/pdf",
+        openDirectly: false,
+      }),
+    ).toBe("user-1/asset-1/menu.pdf");
+  });
+
+  it("returns the storage path regardless of openDirectly (never encoded into the payload string)", () => {
+    expect(
+      buildPdfPayload({
+        path: "user-1/asset-1/menu.pdf",
+        fileName: "menu.pdf",
+        sizeBytes: 1,
+        mimeType: "application/pdf",
+        openDirectly: true,
       }),
     ).toBe("user-1/asset-1/menu.pdf");
   });

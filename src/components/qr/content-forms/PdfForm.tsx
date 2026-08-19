@@ -34,6 +34,7 @@ export function PdfForm({ value, onChange }: PdfFormProps) {
     try {
       const asset = await uploadQrAsset("pdf", file);
       onChange({
+        ...current,
         path: asset.path,
         fileName: asset.fileName,
         sizeBytes: asset.sizeBytes,
@@ -76,6 +77,23 @@ export function PdfForm({ value, onChange }: PdfFormProps) {
           </Button>
         </div>
       ) : null}
+
+      <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={current.openDirectly === true}
+            onChange={(event) => onChange({ ...current, openDirectly: event.target.checked })}
+          />
+          Open PDF directly
+        </label>
+        <p className="text-xs text-muted-foreground">
+          Skip the file page and open this PDF immediately after scanning.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          You can still replace the PDF later without changing your QR code.
+        </p>
+      </div>
     </FormField>
   );
 }

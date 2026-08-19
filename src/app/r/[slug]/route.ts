@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server";
 import { resolveDynamicQrRedirect } from "@/server/services/redirect-resolution";
 import { recordQrScan } from "@/lib/qr/scan-tracking";
 import { readClientIp } from "@/lib/rate-limit";
+import { readEdgeCountryCode } from "@/lib/qr/edge-headers";
 
 /**
  * Module 3.12: per-IP redirect-abuse protection — generous enough that a
@@ -59,18 +60,6 @@ function renderUnavailablePage(status: number, title: string, message: string): 
  * the module's own "cache strategy" requirement.
  */
 export const dynamic = "force-dynamic";
-
-/**
- * Coarse geolocation "if available and legally appropriate" (Module 3.7):
- * reads whichever edge platform's own country header is present rather
- * than calling a geo-IP service — zero added latency, no third-party data
- * sharing, and genuinely absent (not guessed) on hosting that provides
- * neither. Vercel and Cloudflare are the two most common fronts for a
- * Next.js app; add another header here if a different platform is used.
- */
-function readEdgeCountryCode(headers: Headers): string | null {
-  return headers.get("x-vercel-ip-country") ?? headers.get("cf-ipcountry");
-}
 
 export async function GET(request: Request, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params;

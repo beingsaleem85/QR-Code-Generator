@@ -1,5 +1,12 @@
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { resolveLandingPage } from "@/server/services/landing-page-resolution";
+import { resolvePdfDirectOpenUrl } from "@/server/services/pdf-direct-open";
+import { recordQrScan } from "@/lib/qr/scan-tracking";
+import { readEdgeCountryCode } from "@/lib/qr/edge-headers";
+import { isSafeRedirectTarget } from "@/lib/qr/redirect-url";
+import { PdfDirectOpenRedirect } from "@/components/landing/PdfDirectOpenRedirect";
 import { PdfLandingPage } from "@/components/landing/PdfLandingPage";
 import { GalleryLandingPage } from "@/components/landing/GalleryLandingPage";
 import { AudioLandingPage } from "@/components/landing/AudioLandingPage";
@@ -43,8 +50,28 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
   }
 
   switch (resolution.qrType) {
-    case "pdf":
+    case "pdf": {
+      // "Open PDF directly" (payload_data.openDirectly): skip the landing
+      // page and send the scanner straight to the current PDF, resolved
+      // fresh on every request — never a signed URL baked into the printed
+      // QR (those expire; this app never encodes one). Falls back to the
+      // normal landing page when direct-open isn't enabled, no file has
+      // been uploaded yet, or signing genuinely fails.
+      const directUrl = await resolvePdfDirectOpenUrl(resolution.payloadData);
+      if (directUrl && isSafeRedirectTarget(directUrl)) {
+        // Same non-blocking scan-recording pattern as `/r/[slug]` — read
+        // headers synchronously now, record the scan via `after()`.
+        const requestHeaders = await headers();
+        const metadata = {
+          referrer: requestHeaders.get("referer"),
+          userAgent: requestHeaders.get("user-agent"),
+          countryCode: readEdgeCountryCode(requestHeaders),
+        };
+        after(() => recordQrScan(slug, metadata));
+        return <PdfDirectOpenRedirect url={directUrl} />;
+      }
       return <PdfLandingPage payloadData={resolution.payloadData} />;
+    }
     case "images":
       return <GalleryLandingPage payloadData={resolution.payloadData} />;
     case "audio":

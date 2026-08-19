@@ -13,6 +13,16 @@ export const pdfQrSchema = z.object({
   fileName: z.string().min(1).max(255),
   sizeBytes: z.number().nonnegative(),
   mimeType: z.literal("application/pdf"),
+  /**
+   * When true, `/p/[slug]` skips the landing page and redirects the
+   * scanner straight to the current PDF asset instead (see
+   * `resolvePdfDirectOpenUrl`, `src/server/services/pdf-direct-open.ts`).
+   * Optional + defaulted so an existing record's `payload_data` — saved
+   * before this field existed — parses to `false` with no migration/
+   * backfill needed, exactly the same "missing means off" behavior as if
+   * the record had been saved with it unchecked.
+   */
+  openDirectly: z.boolean().optional().default(false),
 });
 
 export type PdfQrInput = z.infer<typeof pdfQrSchema>;

@@ -69,4 +69,103 @@ describe("QRGeneratorShell edit variant (Module 2.7)", () => {
     expect(screen.queryByRole("button", { name: "Save Changes" })).not.toBeInTheDocument();
     expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
   });
+
+  describe("PDF direct-open setting, edit flow", () => {
+    it("loads a saved PDF QR with Open PDF directly checked when the record has openDirectly: true", () => {
+      render(
+        <QRGeneratorShell
+          variant="edit"
+          initialName="Menu"
+          initialMode="dynamic"
+          initialQrType="pdf"
+          initialContent={{
+            path: "u/a/menu.pdf",
+            fileName: "menu.pdf",
+            sizeBytes: 100,
+            mimeType: "application/pdf",
+            openDirectly: true,
+          }}
+          initialSlug="abc12345"
+        />,
+      );
+
+      expect(screen.getByRole("checkbox", { name: /open pdf directly/i })).toBeChecked();
+    });
+
+    it("loads a saved PDF QR from before this field existed as unchecked", () => {
+      render(
+        <QRGeneratorShell
+          variant="edit"
+          initialName="Menu"
+          initialMode="dynamic"
+          initialQrType="pdf"
+          initialContent={{
+            path: "u/a/menu.pdf",
+            fileName: "menu.pdf",
+            sizeBytes: 100,
+            mimeType: "application/pdf",
+          }}
+          initialSlug="abc12345"
+        />,
+      );
+
+      expect(screen.getByRole("checkbox", { name: /open pdf directly/i })).not.toBeChecked();
+    });
+
+    it("toggling Open PDF directly off marks the QR dirty and persists the unchecked state", async () => {
+      const user = userEvent.setup();
+      render(
+        <QRGeneratorShell
+          variant="edit"
+          initialName="Menu"
+          initialMode="dynamic"
+          initialQrType="pdf"
+          initialContent={{
+            path: "u/a/menu.pdf",
+            fileName: "menu.pdf",
+            sizeBytes: 100,
+            mimeType: "application/pdf",
+            openDirectly: true,
+          }}
+          initialSlug="abc12345"
+        />,
+      );
+
+      const checkbox = screen.getByRole("checkbox", { name: /open pdf directly/i });
+      expect(checkbox).toBeChecked();
+
+      await user.click(checkbox);
+
+      expect(checkbox).not.toBeChecked();
+      expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Save Changes" })).toBeEnabled();
+    });
+
+    it("keeps the checkbox state after interacting with an unrelated field (persists through builder state)", async () => {
+      const user = userEvent.setup();
+      render(
+        <QRGeneratorShell
+          variant="edit"
+          initialName="Menu"
+          initialMode="dynamic"
+          initialQrType="pdf"
+          initialContent={{
+            path: "u/a/menu.pdf",
+            fileName: "menu.pdf",
+            sizeBytes: 100,
+            mimeType: "application/pdf",
+          }}
+          initialSlug="abc12345"
+        />,
+      );
+
+      const checkbox = screen.getByRole("checkbox", { name: /open pdf directly/i });
+      await user.click(checkbox);
+      expect(checkbox).toBeChecked();
+
+      await user.type(screen.getByLabelText("QR name"), " updated");
+
+      expect(checkbox).toBeChecked();
+    });
+  });
 });
