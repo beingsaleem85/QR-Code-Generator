@@ -1243,3 +1243,43 @@ The master prompt's own instruction is explicit: "Avoid loading thousands of QR 
 
 - None blocking. Folder rename isn't supported (create/delete only) — a deliberate scope decision, not an oversight; add it later if real usage shows it's needed.
 - The Pagination component's real page-2+ rendering was proven through the exact same `listQrCodesPage()` calls the page itself makes (live, with real `pageSize`/`page` values producing correct slices) and through component-level tests with mocked `page`/`pageCount` props, but wasn't observed through 20+ real seeded rows forcing the actual `/dashboard/qr-codes` page past its default page size — seeding that many rows just to watch the same already-proven code path render didn't add meaningfully to confidence, so it was skipped.
+
+## QR Status, Duplicate, Archive, and Safe Delete (Module 3.11)
+
+### Mostly an audit, not a rebuild — but it found one real bug
+
+Duplicate, Archive, Pause, and Delete all already existed from Modules 3.5/3.6, so this module's job was to check each one against the master prompt's specific wording rather than build from scratch. Two genuine gaps came out of that audit and are fixed here; everything else was confirmed already correct.
+
+### The bug: a duplicated file-based QR silently shared the original's Storage object
+
+`duplicateQrCode` copied `payload_data` as-is, including its Storage path reference(s) — but never created a `qr_assets` row for the new QR, so the _original_ remained the sole owner of that `(bucket, path)`. The danger: deleting the original later would delete the underlying Storage object (via `deleteQrCode`'s existing cleanup), silently breaking the duplicate's landing page even though the duplicate itself was never touched. This is exactly the "accidental cascading loss" the master prompt's own Delete section warns against — deleting one QR should never break a different one.
+
+The fix, `duplicateQrAssets()` (`src/lib/qr/asset-sync.ts`): for any `needsStorage` type, each Storage object is genuinely copied — `supabase.storage.from(bucket).copy(oldPath, newPath)` (no download/re-upload round trip) to a fresh `{user_id}/{uuid}/{filename}` path — and a new `qr_assets` row is inserted for the _new_ QR pointing at the copy. `duplicateQrCode` then rewrites the duplicate's `payload_data` (per-type: `pdf`/`audio`'s single `path`, `images`' array, `menu`'s per-item `photo.path`) to reference the new paths before the row is considered final. Best-effort per asset — if one file's copy fails, that one item is left referencing the original's path rather than failing the whole duplicate action (matching `syncQrAssets`'s existing "don't let asset housekeeping block the core action" precedent in the same file).
+
+**Live-verified end to end**: uploaded a real PDF, saved it as a dynamic PDF QR, duplicated it — confirmed the duplicate's `payload_data.path` was a genuinely different path, confirmed via direct SQL that both QRs now own independent `qr_assets` rows, confirmed the copied file at the new path contains the exact original bytes (a real `.copy()`, not a broken reference), then **deleted the original** and confirmed: the original's file is gone (correct), the duplicate's file still exists (the actual fix), and the duplicate's `/p/[slug]` landing page still serves the correct PDF bytes through a working signed URL.
+
+### The other gap: `/r/[slug]` returned raw JSON for a paused/missing QR
+
+The master prompt is specific: pausing a dynamic QR should show "a controlled unavailable page rather than redirecting." Module 3.6 already correctly returns 404/410 instead of redirecting, but the response body was `{"error": "not_found"}`/`{"error": "inactive"}` — a raw JSON blob, not a page a visitor scanning a printed code could make sense of. Fixed with `renderUnavailablePage()` (`src/app/r/[slug]/route.ts`): a small, self-contained HTML response (inline CSS, no dependency on the app's normal layout/stylesheet pipeline — Module 3.13 cares about keeping this hot redirect path lightweight, so this deliberately doesn't pull in React rendering or the global stylesheet) with a distinct message for "doesn't exist" vs. "paused/archived." Status codes (404/410) and the underlying resolution logic (`resolveDynamicQrRedirect`, unchanged since Module 3.6) are untouched — only the response body changed. Live-verified: a genuinely unknown slug on the real dev server returned a real HTML page (`<title>Link not found — QRForge</title>`, status 404, confirmed via the page's own title bar and a direct network-request check) instead of raw JSON.
+
+### Delete confirmation now discloses what it actually destroys
+
+The delete `<dialog>`'s copy always said "This permanently deletes the QR code and its scan history" regardless of type — accurate for a plain type, incomplete for a file-based type (also destroys Storage files) or a feedback type (also destroys submissions, which cascade via `ON DELETE CASCADE` same as scan events). `deleteScopeMessage()` (`src/components/dashboard/QRCodeRowActions.tsx`) now composes the disclosure from the actual type: `needsStorage` adds "any uploaded files," `feedback` adds "any feedback received." The underlying delete behavior itself was already correct (confirmed via Module 3.8/3.9's own live verification) — this only fixes what the confirmation _says_, so the disclosure matches reality.
+
+### Everything else, confirmed already correct (no change needed)
+
+- **Duplicate** (non-Storage part): copies `payload_data`/`design_config`, generates a new id (DB default), a new slug for a dynamic QR, new timestamps (DB defaults) — exactly per the master prompt's wording, unchanged since Module 3.5.
+- **Archive**: a pure `status = 'archived'` update (`setQrCodeStatus`) — no cascade, `qr_scan_events`/`qr_feedback_submissions` are untouched, `listQrCodesPage`'s default view already excludes archived rows (Module 3.10). Analytics for an archived QR remain fully intact and viewable.
+- **Delete's Storage/scan-history behavior**: already fully defined since Modules 3.5/3.8 — real Storage objects removed via `deleteQrCode`, `qr_scan_events`/`qr_feedback_submissions` cascade via `ON DELETE CASCADE` on `qr_code_id` (intentional — scan/feedback history is meaningless without its parent QR, and now properly disclosed in the confirmation dialog per above).
+
+### Verification
+
+- New/updated tests (17 net, taking the suite from 442 to 451 across 68 files): `asset-sync.test.ts` (+5, every `duplicateQrAssets` branch — single file, gallery, menu photo, no-assets-for-this-type, copy-failure-leaves-original-path), `actions.test.ts` (+1, the full duplicate-with-asset-copy flow), `QRCodeRowActions.test.tsx` (+3, the three `deleteScopeMessage` variants), `r-slug-route.test.ts` (2 rewritten — HTML body/content-type instead of JSON, same status-code assertions).
+- `npm run typecheck` / `npx eslint .` (0 errors, same 11 pre-existing warnings) / `npx prettier --check .` — all pass.
+- `npx vitest run` — **451/451 passing** across 68 files.
+- `rm -rf .next && npm run build` — pass, all routes build.
+- **Live verification against the real Supabase project** (no new migration this module — application-code-only changes; a throwaway confirmed account via the established `mailer_autoconfirm` toggle, using a `SUPABASE_ACCESS_TOKEN` the user pasted directly in chat for this purpose): the full duplicate→verify-independent-copy→delete-original→confirm-duplicate-survives sequence above, plus a zero-setup live check of `/r/[slug]`'s new HTML page against a genuinely unknown slug (no Supabase data needed for that one — a real 404 miss). All test data (2 QR codes, their Storage objects) and the throwaway account cleaned up; `mailer_autoconfirm` restored to `false`; the temporary route removed (confirmed via `git status`). Final check: exactly one `auth.users` row (the permanent `mts.pk@hotmail.com` account) and zero `qr_codes`/`qr_assets`/Storage-object rows anywhere in the project.
+
+### Known issues
+
+- None blocking. The 410 ("paused/archived") variant of the new `/r/[slug]` unavailable page was verified via unit test (mocked resolution → correct HTML/status) rather than a second live round-trip against a real paused QR — the resolution logic itself (`resolveDynamicQrRedirect`) is unchanged and was already thoroughly live-verified in Module 3.6; only the response _rendering_ changed, and that's the same `renderUnavailablePage()` function already proven live for the 404 case.

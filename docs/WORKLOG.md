@@ -917,3 +917,30 @@ Known issues:
 Next:
 
 - Module 3.11 — QR Status, Duplicate, Archive, and Safe Delete
+
+## Module 3.11 — QR Status, Duplicate, Archive, and Safe Delete
+
+Status: COMPLETE
+
+Completed:
+
+- **Real bug found and fixed via audit**: duplicating a file-based QR (pdf/images/audio/menu) copied `payload_data` (including its Storage path) but never gave the duplicate its own `qr_assets` row — the original stayed the sole owner of the file, so deleting the original later silently broke the duplicate's landing page. Fixed with `duplicateQrAssets()` (`src/lib/qr/asset-sync.ts`): genuinely copies the Storage object (`storage.copy()`, no download/re-upload) to a fresh path, inserts an independent `qr_assets` row for the new QR, and rewrites the duplicate's `payload_data` to the new path(s) — best-effort per asset so one failed copy doesn't fail the whole duplicate.
+- **`/r/[slug]` now shows a controlled unavailable page, not raw JSON**, for a paused/missing dynamic QR — the master prompt's own explicit requirement. `renderUnavailablePage()` (`src/app/r/[slug]/route.ts`) is a small self-contained HTML response (same 404/410 status codes, unchanged resolution logic) instead of `{"error": "..."}`.
+- **Delete confirmation now discloses what it actually destroys**: `deleteScopeMessage()` (`QRCodeRowActions.tsx`) adds "any uploaded files" for storage-backed types and "any feedback received" for feedback QRs, instead of a one-size-fits-all "scan history" message that under-disclosed for those types.
+- **Everything else audited and confirmed already correct, no change needed**: Duplicate's content/design/id/slug/timestamp copying (Module 3.5), Archive's non-destructive status-only update with analytics/history fully intact (Module 3.5), Delete's Storage-cleanup and cascade behavior (Modules 3.5/3.8).
+
+Verification:
+
+- New/updated tests (17 net): `asset-sync.test.ts` (+5, every `duplicateQrAssets` branch), `actions.test.ts` (+1, full duplicate-with-asset-copy flow), `QRCodeRowActions.test.tsx` (+3, type-aware delete disclosure), `r-slug-route.test.ts` (2 rewritten for the HTML response).
+- `npm run typecheck` / `npx eslint .` (0 errors, same 11 pre-existing warnings) / `npx prettier --check .` — pass.
+- `npx vitest run` — **451/451 passing** across 68 files.
+- `rm -rf .next && npm run build` — pass, all routes build.
+- **Live verification against the real Supabase project** (no new migration — application-code-only): uploaded a real PDF, saved a dynamic PDF QR, duplicated it, confirmed via direct SQL that both QRs now own independent `qr_assets` rows and the copied file has the exact original bytes at a genuinely new path — then **deleted the original** and confirmed the duplicate's file survived and its `/p/[slug]` landing page still served the correct PDF. `/r/[slug]`'s new HTML page verified live against a real unknown slug (zero setup needed — a real 404 miss). All test data and the throwaway account cleaned up; `mailer_autoconfirm` restored to `false`. Full detail in `docs/ARCHITECTURE.md`.
+
+Known issues:
+
+- None blocking. See `docs/ARCHITECTURE.md`'s "Known issues" under Module 3.11 — the 410 variant of the new unavailable page was verified via unit test rather than a second live round-trip, since the underlying resolution logic is unchanged and already live-verified in Module 3.6.
+
+Next:
+
+- Module 3.12 — Security Hardening

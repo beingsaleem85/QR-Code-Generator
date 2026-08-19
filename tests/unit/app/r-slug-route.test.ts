@@ -36,17 +36,20 @@ describe("GET /r/[slug]", () => {
     expect(response.headers.get("location")).toBe("https://example.com/landing");
   });
 
-  it("returns 404 for an unknown slug", async () => {
+  it("returns 404 with a controlled HTML unavailable page for an unknown slug, not a redirect", async () => {
     resolveDynamicQrRedirect.mockResolvedValue({ status: "not_found" });
     const { GET } = await import("@/app/r/[slug]/route");
 
     const response = await GET(new Request("https://app.example/r/nope"), makeContext("nope"));
 
     expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({ error: "not_found" });
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("content-type")).toMatch(/text\/html/);
+    const body = await response.text();
+    expect(body).toContain("Link not found");
   });
 
-  it("returns 410 for a paused/archived dynamic QR", async () => {
+  it("returns 410 with a controlled HTML unavailable page for a paused/archived dynamic QR, not a redirect", async () => {
     resolveDynamicQrRedirect.mockResolvedValue({ status: "inactive" });
     const { GET } = await import("@/app/r/[slug]/route");
 
@@ -56,7 +59,10 @@ describe("GET /r/[slug]", () => {
     );
 
     expect(response.status).toBe(410);
-    expect(await response.json()).toEqual({ error: "inactive" });
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("content-type")).toMatch(/text\/html/);
+    const body = await response.text();
+    expect(body).toContain("Link not active");
   });
 
   it("records a scan (referrer, user-agent, edge country header) without delaying the redirect", async () => {

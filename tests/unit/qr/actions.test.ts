@@ -401,6 +401,53 @@ describe("duplicateQrCode", () => {
     expect(result.error).toMatch(/limit of 2/i);
     expect(result.data).toBeUndefined();
   });
+
+  it("gives a storage-backed duplicate its own independent copy of the asset, not a shared path", async () => {
+    const copy = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        {
+          data: {
+            name: "Original",
+            mode: "dynamic",
+            qr_type: "pdf",
+            payload_data: {
+              path: "user-1/orig/menu.pdf",
+              fileName: "menu.pdf",
+              sizeBytes: 100,
+              mimeType: "application/pdf",
+            },
+            design_config: DEFAULT_DESIGN_CONFIG,
+            destination_url: null,
+          },
+          error: null,
+        },
+        { data: null, error: null }, // entitlement lookup: no row -> free/unlimited
+        { data: { id: "copy-id" }, error: null }, // the qr_codes insert
+        { data: null, error: null }, // duplicateQrAssets' qr_assets insert
+        { data: null, error: null }, // the payload_data update
+      ],
+      storage: { from: vi.fn(() => ({ copy })) },
+    });
+    const { duplicateQrCode } = await loadActions(client);
+
+    const result = await duplicateQrCode("source-id");
+
+    expect(result.data).toEqual({ id: "copy-id" });
+    expect(copy).toHaveBeenCalledWith(
+      "user-1/orig/menu.pdf",
+      expect.stringMatching(/^user-1\/[0-9a-f-]+\/menu\.pdf$/),
+    );
+    const updateChain = client.from.mock.results[4].value;
+    expect(updateChain.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload_data: expect.objectContaining({
+          path: expect.stringMatching(/^user-1\/[0-9a-f-]+\/menu\.pdf$/),
+        }),
+      }),
+    );
+  });
 });
 
 describe("setQrCodeStatus (archive/unarchive)", () => {

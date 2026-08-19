@@ -8,8 +8,9 @@ import { generateRandomSlug } from "@/lib/qr/slug";
 import { getEntitlementForUser, resolveDynamicQrAllowance } from "@/lib/account/entitlements";
 import { countDynamicQrCodes } from "@/lib/qr/queries";
 import { getQrTypeDefinition } from "@/lib/qr/registry";
-import { syncQrAssets } from "@/lib/qr/asset-sync";
+import { syncQrAssets, duplicateQrAssets } from "@/lib/qr/asset-sync";
 import type { QRCodeStatus } from "@/types/qr-record";
+import type { QRType } from "@/types/qr";
 
 function revalidateQrPaths(id?: string) {
   revalidatePath("/dashboard");
@@ -237,6 +238,22 @@ export async function duplicateQrCode(id: string): Promise<ActionResult<{ id: st
       .single();
 
     if (!error) {
+      // Give the duplicate its own independent copy of any Storage-backed
+      // asset (never share ownership of the original's file — see
+      // `duplicateQrAssets`'s doc comment for why that would make deleting
+      // either QR unsafe for the other).
+      if (getQrTypeDefinition(source.qr_type as QRType).needsStorage) {
+        const remapped = await duplicateQrAssets(
+          supabase,
+          user.id,
+          data.id,
+          source.qr_type as QRType,
+          source.payload_data,
+        );
+        if (remapped !== source.payload_data) {
+          await supabase.from("qr_codes").update({ payload_data: remapped }).eq("id", data.id);
+        }
+      }
       revalidateQrPaths(data.id);
       return { data: { id: data.id } };
     }

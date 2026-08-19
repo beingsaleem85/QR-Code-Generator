@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { syncQrAssets } from "@/lib/qr/asset-sync";
+import { syncQrAssets, duplicateQrAssets } from "@/lib/qr/asset-sync";
 
 function createChain(result: { data?: unknown; error?: unknown }) {
   const chain: Record<string, unknown> = {
@@ -7,6 +7,7 @@ function createChain(result: { data?: unknown; error?: unknown }) {
     eq: vi.fn(() => chain),
     delete: vi.fn(() => chain),
     in: vi.fn(() => chain),
+    insert: vi.fn(() => chain),
     upsert: vi.fn(() => Promise.resolve(result)),
     then: (resolve: (value: typeof result) => void) => resolve(result),
   };
@@ -17,9 +18,10 @@ function mockSupabase(fromResults: { data?: unknown; error?: unknown }[]) {
   const chains = fromResults.map(createChain);
   const from = vi.fn();
   chains.forEach((chain) => from.mockReturnValueOnce(chain));
-  const remove = vi.fn(() => Promise.resolve({ data: null, error: null }));
-  const storageFrom = vi.fn(() => ({ remove }));
-  return { from, storage: { from: storageFrom }, remove, storageFrom };
+  const remove = vi.fn(() => Promise.resolve({ data: null, error: null as unknown }));
+  const copy = vi.fn(() => Promise.resolve({ data: null, error: null as unknown }));
+  const storageFrom = vi.fn(() => ({ remove, copy }));
+  return { from, storage: { from: storageFrom }, remove, copy, storageFrom };
 }
 
 describe("syncQrAssets", () => {
@@ -198,5 +200,104 @@ describe("syncQrAssets", () => {
       bucket: "qr-gallery",
       path: "user-1/a/fries.jpg",
     });
+  });
+});
+
+describe("duplicateQrAssets", () => {
+  it("copies a single file (pdf) to a new path and rewrites the returned content", async () => {
+    const client = mockSupabase([{ data: null, error: null }]);
+
+    const result = await duplicateQrAssets(client as never, "user-1", "new-qr-1", "pdf", {
+      path: "user-1/orig/menu.pdf",
+      fileName: "menu.pdf",
+      sizeBytes: 100,
+      mimeType: "application/pdf",
+    });
+
+    expect(client.copy).toHaveBeenCalledWith(
+      "user-1/orig/menu.pdf",
+      expect.stringMatching(/^user-1\/[0-9a-f-]+\/menu\.pdf$/),
+    );
+    expect(client.storageFrom).toHaveBeenCalledWith("qr-documents");
+    expect(result.path).not.toBe("user-1/orig/menu.pdf");
+    expect(result.path).toMatch(/^user-1\/[0-9a-f-]+\/menu\.pdf$/);
+
+    const insertChain = client.from.mock.results[0].value;
+    expect(insertChain.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_id: "user-1",
+        qr_code_id: "new-qr-1",
+        asset_type: "pdf_document",
+        bucket: "qr-documents",
+      }),
+    );
+  });
+
+  it("copies every image in a gallery and rewrites each path independently", async () => {
+    const client = mockSupabase([
+      { data: null, error: null },
+      { data: null, error: null },
+    ]);
+
+    const result = await duplicateQrAssets(client as never, "user-1", "new-qr-1", "images", {
+      images: [
+        { path: "user-1/a/1.jpg", fileName: "1.jpg", sizeBytes: 10, mimeType: "image/jpeg" },
+        { path: "user-1/a/2.jpg", fileName: "2.jpg", sizeBytes: 20, mimeType: "image/jpeg" },
+      ],
+    });
+
+    expect(client.copy).toHaveBeenCalledTimes(2);
+    expect((result.images as { path: string }[])[0].path).not.toBe("user-1/a/1.jpg");
+    expect((result.images as { path: string }[])[1].path).not.toBe("user-1/a/2.jpg");
+  });
+
+  it("rewrites a menu item's photo path, leaving items with no photo untouched", async () => {
+    const client = mockSupabase([{ data: null, error: null }]);
+
+    const result = await duplicateQrAssets(client as never, "user-1", "new-qr-1", "menu", {
+      title: "Menu",
+      items: [
+        { name: "Fries", price: "$5" },
+        {
+          name: "Burger",
+          photo: {
+            path: "user-1/a/burger.jpg",
+            fileName: "burger.jpg",
+            sizeBytes: 30,
+            mimeType: "image/jpeg",
+          },
+        },
+      ],
+    });
+
+    const items = result.items as { name: string; photo?: { path: string } }[];
+    expect(items[0].photo).toBeUndefined();
+    expect(items[1].photo?.path).not.toBe("user-1/a/burger.jpg");
+  });
+
+  it("returns the original content unchanged for a type with no storage-backed assets", async () => {
+    const client = mockSupabase([]);
+
+    const result = await duplicateQrAssets(client as never, "user-1", "new-qr-1", "url", {
+      url: "https://example.com",
+    });
+
+    expect(result).toEqual({ url: "https://example.com" });
+    expect(client.copy).not.toHaveBeenCalled();
+  });
+
+  it("skips (doesn't rewrite) an asset whose copy fails, leaving its original path", async () => {
+    const client = mockSupabase([{ data: null, error: null }]);
+    client.copy.mockResolvedValueOnce({ data: null, error: { message: "copy failed" } });
+
+    const result = await duplicateQrAssets(client as never, "user-1", "new-qr-1", "pdf", {
+      path: "user-1/orig/menu.pdf",
+      fileName: "menu.pdf",
+      sizeBytes: 100,
+      mimeType: "application/pdf",
+    });
+
+    expect(result.path).toBe("user-1/orig/menu.pdf");
+    expect(client.from).not.toHaveBeenCalled();
   });
 });

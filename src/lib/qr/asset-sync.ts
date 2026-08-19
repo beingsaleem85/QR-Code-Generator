@@ -76,7 +76,7 @@ function menuAssets(content: Record<string, unknown>): AssetRef[] {
     }));
 }
 
-function extractAssetRefs(qrType: QRType, content: Record<string, unknown>): AssetRef[] {
+export function extractAssetRefs(qrType: QRType, content: Record<string, unknown>): AssetRef[] {
   switch (qrType) {
     case "pdf":
       return singleFileAsset("pdf_document", "qr-documents", content);
@@ -153,4 +153,105 @@ export async function syncQrAssets(
       { onConflict: "bucket,path" },
     );
   }
+}
+
+function remapAssetPaths(
+  qrType: QRType,
+  content: Record<string, unknown>,
+  pathMap: Map<string, string>,
+): Record<string, unknown> {
+  switch (qrType) {
+    case "pdf":
+    case "audio": {
+      const c = content as FileFieldShape;
+      if (typeof c.path === "string" && pathMap.has(c.path)) {
+        return { ...content, path: pathMap.get(c.path) };
+      }
+      return content;
+    }
+    case "images": {
+      const images = Array.isArray(content.images) ? content.images : [];
+      return {
+        ...content,
+        images: images.map((image) => {
+          const path = (image as FileFieldShape)?.path;
+          return typeof path === "string" && pathMap.has(path)
+            ? { ...image, path: pathMap.get(path) }
+            : image;
+        }),
+      };
+    }
+    case "menu": {
+      const items = Array.isArray(content.items) ? content.items : [];
+      return {
+        ...content,
+        items: items.map((item) => {
+          const photo = (item as MenuItemShape)?.photo;
+          const path = photo?.path;
+          if (typeof path === "string" && pathMap.has(path)) {
+            return { ...item, photo: { ...photo, path: pathMap.get(path) } };
+          }
+          return item;
+        }),
+      };
+    }
+    default:
+      return content;
+  }
+}
+
+/**
+ * Called only from `duplicateQrCode` (`src/lib/qr/actions.ts`) — makes a
+ * storage-backed duplicate a genuinely independent copy instead of a second
+ * `payload_data` pointer at the *same* file the original owns. Without
+ * this, deleting the original would delete the underlying Storage object
+ * out from under the duplicate too (an "accidental cascading loss" the
+ * master build prompt's Module 3.11 explicitly calls out for Delete),
+ * since only one `qr_assets` row can ever own a given `(bucket, path)`.
+ *
+ * Uses Storage's own `.copy()` (no download/re-upload round trip) to
+ * create a new object at a fresh `{user_id}/{uuid}/{filename}` path, then
+ * inserts a new `qr_assets` row for the new QR pointing at the copy.
+ * Best-effort per asset: if one file's copy fails, that one asset is left
+ * unduplicated (the duplicate's content still references the original's
+ * path for that item) rather than the whole duplicate action failing —
+ * consistent with `syncQrAssets`'s "don't let asset housekeeping block the
+ * core save" precedent elsewhere in this file. Returns the `content` with
+ * every successfully-copied path rewritten to its new location; the
+ * caller is responsible for persisting the returned content back onto the
+ * new row.
+ */
+export async function duplicateQrAssets(
+  supabase: SupabaseClient,
+  userId: string,
+  newQrCodeId: string,
+  qrType: QRType,
+  content: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const refs = extractAssetRefs(qrType, content);
+  if (refs.length === 0) return content;
+
+  const pathMap = new Map<string, string>();
+  for (const ref of refs) {
+    const fileName = ref.path.split("/").pop() ?? "file";
+    const newPath = `${userId}/${crypto.randomUUID()}/${fileName}`;
+
+    const { error: copyError } = await supabase.storage.from(ref.bucket).copy(ref.path, newPath);
+    if (copyError) continue;
+
+    const { error: insertError } = await supabase.from("qr_assets").insert({
+      user_id: userId,
+      qr_code_id: newQrCodeId,
+      asset_type: ref.assetType,
+      bucket: ref.bucket,
+      path: newPath,
+      mime_type: ref.mimeType,
+      size_bytes: ref.sizeBytes,
+    });
+    if (insertError) continue;
+
+    pathMap.set(ref.path, newPath);
+  }
+
+  return pathMap.size > 0 ? remapAssetPaths(qrType, content, pathMap) : content;
 }

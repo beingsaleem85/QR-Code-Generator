@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { duplicateQrCode, deleteQrCode, setQrCodeStatus } from "@/lib/qr/actions";
 import { resolveEncodedPayload, slugifyForFilename } from "@/lib/qr/render";
 import { renderStyledQrPngDataUrl } from "@/lib/qr/styled-svg";
+import { getQrTypeDefinition } from "@/lib/qr/registry";
 import type { QrCodeRecord } from "@/lib/qr/records";
 
 interface QRCodeRowActionsProps {
@@ -26,6 +27,22 @@ function triggerDownload(href: string, filename: string) {
 }
 
 type Busy = "download" | "duplicate" | "archive" | "pause" | "delete" | null;
+
+/**
+ * Module 3.11: "define behavior for linked storage assets and scan
+ * history" — the confirmation dialog should actually say what's being
+ * destroyed, not a generic message that under-discloses for a file-based
+ * or feedback QR. Deletion itself already does the right thing (Module
+ * 3.8/3.9's `deleteQrCode`: real Storage objects removed, scan events and
+ * feedback submissions cascade via `ON DELETE CASCADE`) — this just makes
+ * the disclosure match reality.
+ */
+function deleteScopeMessage(qrCode: QrCodeRecord): string {
+  const parts = ["its scan history"];
+  if (getQrTypeDefinition(qrCode.qrType).needsStorage) parts.push("any uploaded files");
+  if (qrCode.qrType === "feedback") parts.push("any feedback received");
+  return `This permanently deletes the QR code and ${parts.join(", ")}.`;
+}
 
 /**
  * Quick per-row actions for the dashboard QR list (Module 3.5): Download,
@@ -166,7 +183,7 @@ export function QRCodeRowActions({ qrCode, showDownload = true }: QRCodeRowActio
           <div>
             <p className="text-sm font-medium text-foreground">Delete {qrCode.name}?</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              This permanently deletes the QR code and its scan history. This can&apos;t be undone.
+              {deleteScopeMessage(qrCode)} This can&apos;t be undone.
             </p>
           </div>
           <div className="flex justify-end gap-2">

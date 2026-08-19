@@ -180,6 +180,43 @@ describe("QRCodeRowActions", () => {
     expect(screen.queryByRole("button", { name: /pause|reactivate/i })).not.toBeInTheDocument();
   });
 
+  it("the delete confirmation discloses scan history only for a plain type", async () => {
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={qrCode} />);
+
+    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Confirm delete My Restaurant Menu" });
+    expect(dialog.textContent).toContain(
+      "This permanently deletes the QR code and its scan history.",
+    );
+    expect(dialog.textContent).not.toContain("uploaded files");
+  });
+
+  it("the delete confirmation also discloses uploaded files for a storage-backed type", async () => {
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={{ ...qrCode, qrType: "pdf" }} />);
+
+    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Confirm delete My Restaurant Menu" });
+    expect(dialog.textContent).toContain(
+      "This permanently deletes the QR code and its scan history, any uploaded files.",
+    );
+  });
+
+  it("the delete confirmation also discloses feedback received for a feedback QR", async () => {
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={{ ...qrCode, qrType: "feedback" }} />);
+
+    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Confirm delete My Restaurant Menu" });
+    expect(dialog.textContent).toContain(
+      "This permanently deletes the QR code and its scan history, any feedback received.",
+    );
+  });
+
   it("downloads a dynamic QR by regenerating its /r/[slug] redirect link, not the raw destination", async () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example";
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
