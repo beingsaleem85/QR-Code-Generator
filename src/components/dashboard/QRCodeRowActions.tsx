@@ -15,6 +15,14 @@ interface QRCodeRowActionsProps {
    * with a resolution picker) — set false there to avoid a redundant
    * second download button. Defaults to true for list/card usage. */
   showDownload?: boolean;
+  /** Set on the QR's own detail page, where a successful delete leaves
+   * nothing at the current URL to refresh into — without this, deleting
+   * from `/dashboard/qr-codes/[id]` just re-fetched that same now-gone
+   * record in place, landing the user on a bare not-found view instead of
+   * back at the list. List/card usage leaves this unset, where a plain
+   * `router.refresh()` is already correct (the row just disappears from
+   * the list it's still on). */
+  redirectAfterDeleteTo?: string;
 }
 
 function triggerDownload(href: string, filename: string) {
@@ -54,7 +62,11 @@ function deleteScopeMessage(qrCode: QrCodeRecord): string {
  * .refresh()` after a mutation re-fetches the Server Component list rather
  * than hand-patching local state, keeping this the single source of truth.
  */
-export function QRCodeRowActions({ qrCode, showDownload = true }: QRCodeRowActionsProps) {
+export function QRCodeRowActions({
+  qrCode,
+  showDownload = true,
+  redirectAfterDeleteTo,
+}: QRCodeRowActionsProps) {
   const router = useRouter();
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
@@ -132,6 +144,9 @@ export function QRCodeRowActions({ qrCode, showDownload = true }: QRCodeRowActio
     if (result.error) {
       setError(result.error);
       return;
+    }
+    if (redirectAfterDeleteTo) {
+      router.push(redirectAfterDeleteTo);
     }
     router.refresh();
   };

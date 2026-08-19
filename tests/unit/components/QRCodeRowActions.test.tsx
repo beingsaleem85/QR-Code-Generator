@@ -114,6 +114,35 @@ describe("QRCodeRowActions", () => {
 
     expect(deleteQrCodeMock).toHaveBeenCalledWith("qr-1");
     expect(refreshMock).toHaveBeenCalled();
+    // List/card usage (no redirectAfterDeleteTo) never navigates — the
+    // row just disappears from the list it's still on.
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("P-04: redirects to the given path after deleting when redirectAfterDeleteTo is set (the QR's own detail page)", async () => {
+    deleteQrCodeMock.mockResolvedValue({ data: { id: "qr-1" } });
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={qrCode} redirectAfterDeleteTo="/dashboard/qr-codes" />);
+
+    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(deleteQrCodeMock).toHaveBeenCalledWith("qr-1");
+    expect(pushMock).toHaveBeenCalledWith("/dashboard/qr-codes");
+    expect(refreshMock).toHaveBeenCalled();
+  });
+
+  it("does not redirect when delete fails, even if redirectAfterDeleteTo is set", async () => {
+    deleteQrCodeMock.mockResolvedValue({ error: "Couldn't delete — it may already be gone." });
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={qrCode} redirectAfterDeleteTo="/dashboard/qr-codes" />);
+
+    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    await screen.findByText("Couldn't delete — it may already be gone.");
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(refreshMock).not.toHaveBeenCalled();
   });
 
   it("shows an error when delete is blocked (e.g. RLS) instead of silently doing nothing", async () => {

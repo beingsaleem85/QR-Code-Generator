@@ -185,7 +185,11 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
 
           <Card className="flex flex-col gap-3 p-5">
             <p className="text-sm font-medium text-foreground">Manage</p>
-            <QRCodeRowActions qrCode={qrCode} showDownload={false} />
+            <QRCodeRowActions
+              qrCode={qrCode}
+              showDownload={false}
+              redirectAfterDeleteTo="/dashboard/qr-codes"
+            />
           </Card>
         </div>
       </div>
