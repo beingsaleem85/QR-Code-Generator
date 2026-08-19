@@ -1089,4 +1089,31 @@ Known issues:
 
 Next:
 
-- Module 3.14 — SEO and Public Content
+- Module 3.17 — Production Readiness and Final Audit
+
+## Module 3.17 — Production Readiness and Final Audit
+
+Status: COMPLETE
+
+Completed:
+
+- **Final Checks**: re-ran production build/TypeScript/lint/unit tests fresh as this module's own gate (all pass identically to Module 3.16's numbers). Re-ran E2E Journey A only (no backend dependency) rather than the full B-F live-Supabase suite again, since Module 3.16 already comprehensively live-verified every journey. New audits this module: **dependency audit** (`npm audit`, 0 vulnerabilities), **secret scan** (grepped every tracked file, 2 hits, both false positives — the word "service_role" in prose, not a real value; confirmed `.env.local` is untracked and gitignored), **route audit** (every route cross-checked against `proxy.ts`/`robots.ts`, only remaining stub is the deliberate `/pricing` placeholder), **broken-link audit** (every internal link across `src/` resolves to a real route, zero broken), **responsive UI audit** (satisfied by Module 3.16's `chromium-mobile` E2E coverage, already real interactive testing on a mobile viewport), **accessibility audit** (every `<img>` has real `alt` text, no unlabeled icon-only buttons found, every E2E test already relies on `getByRole`/`getByLabel` working — indirect but real evidence of accessible markup throughout), **RLS/security audit** (re-read every policy across all 17 migrations, confirmed all 8 `SECURITY DEFINER` functions set `search_path` explicitly — no drift from documentation found), **storage policy audit** (re-confirmed `qr_asset_is_publicly_readable()`'s scoping is still exactly as narrow as documented).
+- **Final Documentation**: fully rewrote `README.md` (was still a Phase-1 scaffold claiming Supabase wasn't connected). Added three new files: `docs/SUPABASE_SETUP.md` (link/configure a fresh project, migrations, buckets, Auth config, every env var's source), `docs/DEPLOYMENT.md` (production env vars, domain/redirect-URL config, a real pre-launch checklist), `docs/SECURITY.md` (a consolidated synthesis of the RLS/no-service-role-key/rate-limiting/CSP posture, including a full per-table RLS reference).
+- **Final Report**: produced `docs/FINAL_REPORT.md` — the master prompt's required 10-section report (Product Summary, Architecture, Completed QR Types [18/20 real, stated plainly], Database, Storage, Analytics, Testing, Known Limitations, Required Production Configuration, Future Enhancements), as a standalone document cross-linking into the other docs rather than duplicating them.
+- **Fixed a stray leftover "Next:" pointer** found in this file at the end of Module 3.16's entry (an artifact of an earlier append during this session) — it incorrectly pointed back at "Module 3.14"; corrected here.
+
+Verification:
+
+- No new tests — this module is audit/documentation, not new application logic.
+- `npm run typecheck` / `npx eslint .` (0 errors, same 11 pre-existing warnings) / `npx prettier --check .` (including every new/rewritten Markdown file) — pass.
+- `npx vitest run` — **474/474 passing** across 70 files.
+- `npx playwright test` (Journey A, both working browser projects) — **2/2 passing**.
+- `rm -rf .next && npm run build` — pass; every previously-static public route remains static.
+- `npm audit` — 0 vulnerabilities.
+- No live Supabase changes this module — every audit item was read-only; nothing to clean up. Full detail in `docs/ARCHITECTURE.md`.
+
+Known issues:
+
+- See `docs/FINAL_REPORT.md`'s "Known Limitations" section for the consolidated, deduplicated list of every real, deliberate gap across the whole build.
+
+This is the final module of the master build prompt's numbered chain (3.1-3.17). No further module follows.
