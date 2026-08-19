@@ -16,7 +16,7 @@ Starting commit: `ea64621` (audit report)
 
 ## Current Step
 
-STEP 2 — Event QR optional end-date bug
+STEP 3 — Feedback QR default-values/save bug
 
 ## Status
 
@@ -40,7 +40,18 @@ IN PROGRESS
 - Status: **COMPLETE**
 
 ### STEP 2 — Event QR optional end-date bug
-- Status: **NOT STARTED**
+- Audit item: E. QR type inventory — Event, FAIL, "cannot save with 'Ends' blank"
+- Reproduced first on production before any code change: confirmed live via commit `ea64621`'s deployed code (Event → title + start only → Save → "Fix the content errors above before saving.").
+- Root cause: `eventQrSchema`'s `end` field was `z.string().refine(isValidDate).optional()`. `EventForm` always submits a string for `end` (`asString(value.end)` defaults to `""`), never `undefined`, even when the field is left blank. Zod's `.optional()` only exempts `undefined` from the inner schema, so the date-format `refine` ran on `""` every time and always failed — `Date.parse("")` is `NaN`. The field was labeled "Optional" in the UI but was, in practice, always required.
+- Fix: `end` is now a plain `z.string().trim().optional()` with no per-field refine. The date-format check moved into an object-level `.refine()` (alongside the pre-existing end-after-start check), both guarded by `!data.end` — true for both `undefined` and `""` — so a blank end is skipped, and a genuinely supplied end is still validated for format and ordering. `buildEventPayload` already treated `""` as falsy (`if (input.end)`), so no change was needed there.
+- Focused tests: `tests/unit/qr/event.test.ts` — 7/7 pass (added: blank end via `""` accepted, whitespace-only end accepted, invalid non-blank end still rejected).
+- Full suite: 638/638 pass.
+- TypeScript: pass. ESLint: pass. Prettier: pass. Production build: pass. Secret scan: clean.
+- Commit SHA: `8923143` — "Fix Event QR: blank optional end date always failed to save"
+- Vercel deployment: `kog7vajl0` — READY, aliased to qrforge.space
+- Production verification: blank end date saves successfully; reload shows the saved QR; edit reloads with Ends still blank; end-before-start is still correctly rejected; a valid supplied end date still saves; detail page healthy afterward. All confirmed live with a temporary account.
+- Cleanup: temp account deleted; `mailer_autoconfirm` restored to `false`.
+- Status: **COMPLETE**
 
 ### STEP 3 — Feedback QR default-values/save bug
 - Status: **NOT STARTED**
