@@ -353,16 +353,50 @@ export async function deleteQrCode(id: string): Promise<ActionResult<{ id: strin
   const user = await requireUser(supabase);
   if (!user) return { error: AUTH_REQUIRED };
 
-  // qr_assets.qr_code_id is ON DELETE SET NULL (Module 1.4), not CASCADE —
-  // deliberately, so an asset can outlive its QR if ever needed — but a
-  // plain delete would otherwise leave the underlying Storage files
-  // orphaned forever with nothing in the UI ever pointing at them again.
-  // Fetched before the delete since qr_code_id becomes unqueryable-by-id
-  // (set to null) the moment the parent row is gone.
-  const { data: orphanedAssets } = await supabase
+  const { data: existing } = await supabase
+    .from("qr_codes")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!existing) {
+    return { error: "That QR code no longer exists, or you don't have access to it." };
+  }
+
+  // Delete dependent Storage objects and their qr_assets rows *before* the
+  // qr_codes row, and stop (leaving everything intact) if Storage removal
+  // fails, rather than deleting the row regardless — qr_assets.qr_code_id
+  // is ON DELETE SET NULL (Module 1.4), not CASCADE, deliberately, so an
+  // asset can outlive its QR if ever needed, but that also means a plain
+  // qr_codes delete followed by an unchecked Storage removal could leave a
+  // real file behind with no qr_assets row left pointing at it — a true,
+  // unrecoverable orphan — if the Storage call ever failed and the error
+  // went unnoticed. Checking the error and deleting the qr_codes row last
+  // means a failure here always leaves the QR (and its real asset) intact
+  // for the user to retry, never a QR that's "deleted" while its file
+  // silently lives on forever.
+  const { data: assets } = await supabase
     .from("qr_assets")
     .select("id, bucket, path")
     .eq("qr_code_id", id);
+
+  for (const asset of (assets as { id: string; bucket: string; path: string }[] | null) ?? []) {
+    const { error: removeError } = await supabase.storage.from(asset.bucket).remove([asset.path]);
+    if (removeError) {
+      return { error: "Couldn't delete this QR code's file — please try again." };
+    }
+  }
+  if (assets && assets.length > 0) {
+    const { error: assetDeleteError } = await supabase
+      .from("qr_assets")
+      .delete()
+      .in(
+        "id",
+        (assets as { id: string }[]).map((asset) => asset.id),
+      );
+    if (assetDeleteError) {
+      return { error: "Couldn't delete — please try again." };
+    }
+  }
 
   const { error, count } = await supabase.from("qr_codes").delete({ count: "exact" }).eq("id", id);
 
@@ -371,20 +405,6 @@ export async function deleteQrCode(id: string): Promise<ActionResult<{ id: strin
   }
   if (!count) {
     return { error: "That QR code no longer exists, or you don't have access to it." };
-  }
-
-  for (const asset of (orphanedAssets as { id: string; bucket: string; path: string }[] | null) ??
-    []) {
-    await supabase.storage.from(asset.bucket).remove([asset.path]);
-  }
-  if (orphanedAssets && orphanedAssets.length > 0) {
-    await supabase
-      .from("qr_assets")
-      .delete()
-      .in(
-        "id",
-        (orphanedAssets as { id: string }[]).map((asset) => asset.id),
-      );
   }
 
   revalidateQrPaths(id);

@@ -821,8 +821,9 @@ describe("deleteQrCode", () => {
     const client = mockSupabase({
       user: mockUser,
       fromResults: [
+        { data: { id: "qr-1" }, error: null }, // existence check
         { data: [], error: null }, // no associated qr_assets to clean up
-        { error: null, count: 1 },
+        { error: null, count: 1 }, // the qr_codes delete
       ],
     });
     const { deleteQrCode } = await loadActions(client);
@@ -832,13 +833,10 @@ describe("deleteQrCode", () => {
     expect(result.data).toEqual({ id: "qr-1" });
   });
 
-  it("reports an error (not a silent success) when RLS blocks the delete — 0 rows affected", async () => {
+  it("reports a safe error when the QR doesn't exist or isn't owned by this user", async () => {
     const client = mockSupabase({
       user: mockUser,
-      fromResults: [
-        { data: [], error: null },
-        { error: null, count: 0 },
-      ],
+      fromResults: [{ data: null, error: null }], // existence check: not found
     });
     const { deleteQrCode } = await loadActions(client);
 
@@ -854,25 +852,54 @@ describe("deleteQrCode", () => {
     expect(result.error).toBe(AUTH_REQUIRED);
   });
 
-  it("removes associated Storage objects and qr_assets rows for a file-based QR", async () => {
+  it("removes associated Storage objects and qr_assets rows for a file-based QR, before deleting the QR itself", async () => {
     const removeMock = vi.fn(() => Promise.resolve({ data: null, error: null }));
     const client = mockSupabase({
       user: mockUser,
       fromResults: [
+        { data: { id: "qr-1" }, error: null }, // existence check
         {
           data: [{ id: "asset-1", bucket: "qr-documents", path: "user-1/asset-1/menu.pdf" }],
           error: null,
         },
-        { error: null, count: 1 }, // the qr_codes delete
         { error: null }, // the qr_assets delete
+        { error: null, count: 1 }, // the qr_codes delete
       ],
       storage: { from: vi.fn(() => ({ remove: removeMock })) },
     });
     const { deleteQrCode } = await loadActions(client);
 
-    await deleteQrCode("qr-1");
+    const result = await deleteQrCode("qr-1");
 
     expect(client.storage.from).toHaveBeenCalledWith("qr-documents");
     expect(removeMock).toHaveBeenCalledWith(["user-1/asset-1/menu.pdf"]);
+    expect(result.data).toEqual({ id: "qr-1" });
+  });
+
+  it("never deletes the QR row (or the qr_assets row) if removing the Storage object fails — no orphan, no data loss, just a safe retryable error", async () => {
+    const removeMock = vi.fn(() =>
+      Promise.resolve({ data: null, error: { message: "storage 500" } }),
+    );
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        { data: { id: "qr-1" }, error: null }, // existence check
+        {
+          data: [{ id: "asset-1", bucket: "qr-documents", path: "user-1/asset-1/menu.pdf" }],
+          error: null,
+        },
+      ],
+      storage: { from: vi.fn(() => ({ remove: removeMock })) },
+    });
+    const { deleteQrCode } = await loadActions(client);
+
+    const result = await deleteQrCode("qr-1");
+
+    expect(result.error).toBeTruthy();
+    expect(result.error).not.toContain("storage 500");
+    expect(result.data).toBeUndefined();
+    // Only the existence check + asset fetch ran — never reached the
+    // qr_assets delete or the qr_codes delete.
+    expect(client.from).toHaveBeenCalledTimes(2);
   });
 });
