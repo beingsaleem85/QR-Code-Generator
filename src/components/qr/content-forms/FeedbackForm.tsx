@@ -26,6 +26,7 @@ export function FeedbackForm({ value, onChange }: FeedbackFormProps) {
   const {
     register,
     watch,
+    getValues,
     formState: { errors },
   } = useForm<FeedbackFormValues>({
     resolver: zodResolver(feedbackQrSchema),
@@ -40,9 +41,17 @@ export function FeedbackForm({ value, onChange }: FeedbackFormProps) {
   });
 
   useEffect(() => {
+    // watch()'s callback only fires on a field-level change event, never
+    // with the form's own defaultValues on mount — so a user who accepts
+    // every default (all of them already valid here) and clicks Save
+    // without touching anything would submit whatever `value` was before
+    // this form ever rendered, typically `{}`. Sync once on mount so the
+    // parent's content always matches what's actually displayed.
+    onChange(getValues() as Record<string, unknown>);
     const subscription = watch((values) => onChange(values as Record<string, unknown>));
     return () => subscription.unsubscribe();
-  }, [watch, onChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- must run only once on mount; getValues/watch/onChange are stable enough in practice and re-running this on every onChange identity change would fight the mount-sync intent.
+  }, []);
 
   return (
     <div className="flex flex-col gap-4">
