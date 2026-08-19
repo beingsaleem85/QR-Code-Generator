@@ -51,6 +51,7 @@ const qrCode: QrCodeRecord = {
   id: "qr-1",
   name: "My Restaurant Menu",
   slug: null,
+  publicToken: null,
   mode: "static",
   qrType: "url",
   status: "active",

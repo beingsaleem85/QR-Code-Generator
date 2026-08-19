@@ -69,6 +69,7 @@ export function QRCodeRowActions({ qrCode, showDownload = true }: QRCodeRowActio
         qrCode.qrType,
         qrCode.payloadData,
         qrCode.slug,
+        qrCode.publicToken,
       );
       if (!payload) {
         setError("Can't regenerate this QR code's content.");

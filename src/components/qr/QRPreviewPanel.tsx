@@ -16,6 +16,9 @@ interface QRPreviewPanelProps {
   /** The saved record's slug (edit mode only) — a dynamic QR has no
    * scannable image until it's been saved once and issued one. */
   slug?: string | null;
+  /** The saved record's opaque public-viewer token (edit mode only) — see
+   * `resolveEncodedPayload`'s doc comment. */
+  publicToken?: string | null;
 }
 
 /** Debounces re-render on rapid input (typing, slider drag) — the Preview
@@ -30,8 +33,15 @@ interface RenderedState {
 }
 
 /** Real, fully-styled QR rendering (Module 3.3) — pattern/eyes/gradient/logo/frame, not just solid colors. */
-export function QRPreviewPanel({ qrType, mode, content, design, slug }: QRPreviewPanelProps) {
-  const payload = resolveEncodedPayload(mode, qrType, content, slug);
+export function QRPreviewPanel({
+  qrType,
+  mode,
+  content,
+  design,
+  slug,
+  publicToken,
+}: QRPreviewPanelProps) {
+  const payload = resolveEncodedPayload(mode, qrType, content, slug, publicToken);
   // Content is valid (so Save will succeed) but a dynamic QR has no slug
   // yet — distinct from "nothing entered" so the empty state explains why.
   const pendingFirstSave = mode === "dynamic" && !slug && !!buildQrPayload(qrType, content);

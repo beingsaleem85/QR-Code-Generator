@@ -17,6 +17,7 @@ function createChain(result: { data?: unknown; error?: unknown; count?: number }
     select: vi.fn(() => chain),
     insert: vi.fn(() => chain),
     update: vi.fn(() => chain),
+    upsert: vi.fn(() => chain),
     delete: vi.fn(() => chain),
     eq: vi.fn(() => chain),
     neq: vi.fn(() => chain),
@@ -204,6 +205,133 @@ describe("saveQrCode", () => {
     expect(client.from).toHaveBeenCalledTimes(2);
   });
 
+  it("mints a public_token for a PDF QR created with openDirectly on", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        { data: null, error: null }, // entitlement lookup
+        { data: { id: "new-id" }, error: null }, // insert
+        { data: [], error: null }, // syncQrAssets: existing assets (none yet)
+        { data: null, error: null }, // syncQrAssets: upsert
+      ],
+    });
+    const { saveQrCode } = await loadActions(client);
+
+    await saveQrCode({
+      ...VALID_INPUT,
+      mode: "dynamic",
+      qrType: "pdf",
+      content: {
+        path: "u/a/menu.pdf",
+        fileName: "menu.pdf",
+        sizeBytes: 100,
+        mimeType: "application/pdf",
+        openDirectly: true,
+      },
+    });
+
+    const insertCall = client.from.mock.results[1].value.insert.mock.calls[0][0];
+    expect(typeof insertCall.public_token).toBe("string");
+    expect(insertCall.public_token.length).toBeGreaterThanOrEqual(16);
+  });
+
+  it("does not mint a public_token for a PDF QR with openDirectly off", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        { data: null, error: null },
+        { data: { id: "new-id" }, error: null },
+        { data: [], error: null },
+        { data: null, error: null },
+      ],
+    });
+    const { saveQrCode } = await loadActions(client);
+
+    await saveQrCode({
+      ...VALID_INPUT,
+      mode: "dynamic",
+      qrType: "pdf",
+      content: {
+        path: "u/a/menu.pdf",
+        fileName: "menu.pdf",
+        sizeBytes: 100,
+        mimeType: "application/pdf",
+        openDirectly: false,
+      },
+    });
+
+    const insertCall = client.from.mock.results[1].value.insert.mock.calls[0][0];
+    expect(insertCall.public_token).toBeNull();
+  });
+
+  it("does not mint a public_token for a non-PDF dynamic QR", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        { data: null, error: null },
+        { data: { id: "new-id" }, error: null },
+      ],
+    });
+    const { saveQrCode } = await loadActions(client);
+
+    await saveQrCode({ ...VALID_INPUT, mode: "dynamic" });
+
+    const insertCall = client.from.mock.results[1].value.insert.mock.calls[0][0];
+    expect(insertCall.public_token).toBeNull();
+  });
+
+  it("gives two separately created PDF direct-open QRs different public tokens", async () => {
+    const clientA = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        { data: null, error: null },
+        { data: { id: "id-a" }, error: null },
+        { data: [], error: null },
+        { data: null, error: null },
+      ],
+    });
+    const { saveQrCode: saveA } = await loadActions(clientA);
+    await saveA({
+      ...VALID_INPUT,
+      mode: "dynamic",
+      qrType: "pdf",
+      content: {
+        path: "u/a/menu.pdf",
+        fileName: "menu.pdf",
+        sizeBytes: 100,
+        mimeType: "application/pdf",
+        openDirectly: true,
+      },
+    });
+    const tokenA = clientA.from.mock.results[1].value.insert.mock.calls[0][0].public_token;
+
+    const clientB = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        { data: null, error: null },
+        { data: { id: "id-b" }, error: null },
+        { data: [], error: null },
+        { data: null, error: null },
+      ],
+    });
+    const { saveQrCode: saveB } = await loadActions(clientB);
+    await saveB({
+      ...VALID_INPUT,
+      mode: "dynamic",
+      qrType: "pdf",
+      content: {
+        path: "u/b/menu.pdf",
+        fileName: "menu.pdf",
+        sizeBytes: 100,
+        mimeType: "application/pdf",
+        openDirectly: true,
+      },
+    });
+    const tokenB = clientB.from.mock.results[1].value.insert.mock.calls[0][0].public_token;
+
+    expect(tokenA).not.toBe(tokenB);
+  });
+
   it("allows creating a dynamic QR when under a finite limit", async () => {
     const client = mockSupabase({
       user: mockUser,
@@ -293,6 +421,35 @@ describe("updateQrCode", () => {
     expect(result.error).toMatch(/limit of 1/i);
     // Never reaches the update — existence check + entitlement + count only.
     expect(client.from).toHaveBeenCalledTimes(3);
+  });
+
+  it("never touches public_token on update — it stays fixed for the life of the record", async () => {
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        { data: { slug: "existing1", mode: "dynamic" }, error: null }, // existence check
+        { data: { id: "qr-1" }, error: null }, // the update itself
+        { data: [], error: null }, // syncQrAssets: existing assets
+        { data: null, error: null }, // syncQrAssets: upsert
+      ],
+    });
+    const { updateQrCode } = await loadActions(client);
+
+    await updateQrCode("qr-1", {
+      ...VALID_INPUT,
+      mode: "dynamic",
+      qrType: "pdf",
+      content: {
+        path: "u/a/menu.pdf",
+        fileName: "menu.pdf",
+        sizeBytes: 100,
+        mimeType: "application/pdf",
+        openDirectly: true,
+      },
+    });
+
+    const updateCall = client.from.mock.results[1].value.update.mock.calls[0][0];
+    expect(updateCall).not.toHaveProperty("public_token");
   });
 
   it("does not re-check the allowance when an already-dynamic QR is merely edited", async () => {
@@ -386,6 +543,81 @@ describe("duplicateQrCode", () => {
     expect(insertCall.destination_url).toBe("https://example.com");
     expect(typeof insertCall.slug).toBe("string");
     expect(insertCall.slug.length).toBeGreaterThan(0);
+  });
+
+  it("mints a fresh public_token for a duplicate of a PDF direct-open QR, different from the source's", async () => {
+    const copy = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        {
+          data: {
+            name: "Original",
+            mode: "dynamic",
+            qr_type: "pdf",
+            payload_data: {
+              path: "u/a/menu.pdf",
+              fileName: "menu.pdf",
+              sizeBytes: 100,
+              mimeType: "application/pdf",
+              openDirectly: true,
+            },
+            design_config: DEFAULT_DESIGN_CONFIG,
+            destination_url: null,
+          },
+          error: null,
+        },
+        { data: null, error: null }, // entitlement lookup: unlimited
+        { data: { id: "copy-id" }, error: null }, // the qr_codes insert
+        { data: null, error: null }, // duplicateQrAssets' qr_assets insert
+        { data: null, error: null }, // the payload_data update
+      ],
+      storage: { from: vi.fn(() => ({ copy })) },
+    });
+    const { duplicateQrCode } = await loadActions(client);
+
+    await duplicateQrCode("source-id");
+
+    const insertCall = client.from.mock.results[2].value.insert.mock.calls[0][0];
+    expect(typeof insertCall.public_token).toBe("string");
+    expect(insertCall.public_token).not.toBe("source-qr-token");
+  });
+
+  it("does not mint a public_token for a duplicate whose source had openDirectly off", async () => {
+    const copy = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const client = mockSupabase({
+      user: mockUser,
+      fromResults: [
+        {
+          data: {
+            name: "Original",
+            mode: "dynamic",
+            qr_type: "pdf",
+            payload_data: {
+              path: "u/a/menu.pdf",
+              fileName: "menu.pdf",
+              sizeBytes: 100,
+              mimeType: "application/pdf",
+              openDirectly: false,
+            },
+            design_config: DEFAULT_DESIGN_CONFIG,
+            destination_url: null,
+          },
+          error: null,
+        },
+        { data: null, error: null },
+        { data: { id: "copy-id" }, error: null },
+        { data: null, error: null },
+        { data: null, error: null },
+      ],
+      storage: { from: vi.fn(() => ({ copy })) },
+    });
+    const { duplicateQrCode } = await loadActions(client);
+
+    await duplicateQrCode("source-id");
+
+    const insertCall = client.from.mock.results[2].value.insert.mock.calls[0][0];
+    expect(insertCall.public_token).toBeNull();
   });
 
   it("rejects duplicating a dynamic QR when the account is at its finite limit", async () => {

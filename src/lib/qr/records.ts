@@ -13,6 +13,7 @@ export interface QrCodeDbRow {
   folder_id: string | null;
   name: string;
   slug: string | null;
+  public_token: string | null;
   mode: string;
   qr_type: string;
   status: string;
@@ -35,6 +36,11 @@ export interface QrCodeRecord {
   id: string;
   name: string;
   slug: string | null;
+  /** Opaque public-viewer token (see `src/lib/qr/public-token.ts`) — only
+   * ever set for a PDF QR created with "Open PDF directly" already on.
+   * Never derived from `id`/`slug`/filename; drives `/v/[token]` instead
+   * of `/p/[slug]` in `resolveEncodedPayload` when present. */
+  publicToken: string | null;
   mode: QRMode;
   qrType: QRType;
   status: QRCodeStatus;
@@ -52,6 +58,7 @@ export function toQrCodeRecord(row: QrCodeDbRow): QrCodeRecord {
     id: row.id,
     name: row.name,
     slug: row.slug,
+    publicToken: row.public_token,
     mode: row.mode as QRMode,
     qrType: row.qr_type as QRType,
     status: row.status as QRCodeStatus,

@@ -21,6 +21,7 @@ export default async function QrCodeEditPage({ params }: { params: Promise<{ id:
         initialContent={qrCode.payloadData}
         initialDesign={qrCode.designConfig}
         initialSlug={qrCode.slug}
+        initialPublicToken={qrCode.publicToken}
       />
     </div>
   );

@@ -16,6 +16,7 @@ function makeRow(overrides: Partial<QrCodeDbRow> = {}): QrCodeDbRow {
     folder_id: null,
     name: "Test QR",
     slug: null,
+    public_token: null,
     mode: "static",
     qr_type: "url",
     status: "active",
@@ -37,6 +38,7 @@ describe("toQrCodeRecord (DB row -> app-layer serialization)", () => {
       id: "11111111-1111-1111-1111-111111111111",
       name: "Test QR",
       slug: null,
+      publicToken: null,
       mode: "static",
       qrType: "url",
       status: "active",
@@ -60,6 +62,18 @@ describe("toQrCodeRecord (DB row -> app-layer serialization)", () => {
     const record = toQrCodeRecord(makeRow({ mode: "dynamic", slug: "abc123xy" }));
     expect(record.mode).toBe("dynamic");
     expect(record.slug).toBe("abc123xy");
+  });
+
+  it("round-trips a PDF row's public_token", () => {
+    const record = toQrCodeRecord(
+      makeRow({ mode: "dynamic", qr_type: "pdf", public_token: "aBcDeFgHiJkLmNoP" }),
+    );
+    expect(record.publicToken).toBe("aBcDeFgHiJkLmNoP");
+  });
+
+  it("leaves public_token null when the row has none", () => {
+    const record = toQrCodeRecord(makeRow());
+    expect(record.publicToken).toBeNull();
   });
 });
 

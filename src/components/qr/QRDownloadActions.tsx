@@ -17,6 +17,8 @@ interface QRDownloadActionsProps {
   name: string;
   /** The saved record's slug (edit mode only) — see QRPreviewPanel. */
   slug?: string | null;
+  /** The saved record's opaque public-viewer token (edit mode only) — see QRPreviewPanel. */
+  publicToken?: string | null;
 }
 
 const PNG_SIZE_OPTIONS = [512, 1024, 2048] as const;
@@ -47,10 +49,11 @@ export function QRDownloadActions({
   design,
   name,
   slug,
+  publicToken,
 }: QRDownloadActionsProps) {
   const [downloading, setDownloading] = useState<"png" | "svg" | null>(null);
   const [pngSize, setPngSize] = useState<PngSize>(1024);
-  const payload = resolveEncodedPayload(mode, qrType, content, slug);
+  const payload = resolveEncodedPayload(mode, qrType, content, slug, publicToken);
   const filename = slugifyForFilename(name);
   const disabled = !payload || downloading !== null;
   const pendingFirstSave = mode === "dynamic" && !slug;

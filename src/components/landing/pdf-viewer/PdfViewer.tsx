@@ -24,7 +24,12 @@ import {
 import { PdfViewerPage } from "./PdfViewerPage";
 
 interface PdfViewerProps {
-  slug: string;
+  /** The same-origin PDF proxy URL to load from — `/api/public-pdf/[slug]`
+   * or `/api/pdf-view/[token]`, built by the caller. This component never
+   * needs to know which kind of public identifier resolved it, only where
+   * to fetch bytes from — never a Supabase Storage URL directly, so the
+   * visible browser URL never leaves whichever public route rendered it. */
+  proxyUrl: string;
   fileName: string;
 }
 
@@ -34,15 +39,12 @@ const EAGER_PAGE_COUNT = 2;
 
 /**
  * Full-screen, application-hosted PDF viewer for a scan-time direct-open
- * QR. Loads the document from `/api/public-pdf/[slug]` — a same-origin
- * proxy, never a Supabase Storage URL — so the visible browser URL never
- * leaves `/p/[slug]`. Renders pages to canvas via `pdfjs-dist`, loaded
- * dynamically inside an effect (never at module scope) so it's never
- * evaluated during server-side rendering, only after this client component
- * has actually mounted in a browser.
+ * QR. Renders pages to canvas via `pdfjs-dist`, loaded dynamically inside
+ * an effect (never at module scope) so it's never evaluated during
+ * server-side rendering, only after this client component has actually
+ * mounted in a browser.
  */
-export function PdfViewer({ slug, fileName }: PdfViewerProps) {
-  const proxyUrl = `/api/public-pdf/${slug}`;
+export function PdfViewer({ proxyUrl, fileName }: PdfViewerProps) {
   const displayName = sanitizePdfFileName(fileName);
 
   const [state, setState] = useState<ViewerState>("loading");

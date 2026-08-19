@@ -10,12 +10,13 @@ import {
 } from "@/lib/qr/action-types";
 import { buildQrPayload } from "@/lib/qr/render";
 import { generateRandomSlug } from "@/lib/qr/slug";
+import { generatePublicToken } from "@/lib/qr/public-token";
 import { getEntitlementForUser, resolveDynamicQrAllowance } from "@/lib/account/entitlements";
 import { countDynamicQrCodes } from "@/lib/qr/queries";
 import { getQrTypeDefinition } from "@/lib/qr/registry";
 import { syncQrAssets, duplicateQrAssets } from "@/lib/qr/asset-sync";
 import type { QRCodeStatus } from "@/types/qr-record";
-import type { QRType } from "@/types/qr";
+import type { QRMode, QRType } from "@/types/qr";
 
 function revalidateQrPaths(id?: string) {
   revalidatePath("/dashboard");
@@ -67,6 +68,19 @@ function resolveDestinationUrl(input: SaveQrCodeInput, payload: string): string 
 }
 
 /**
+ * Whether a brand-new row should be issued an opaque `public_token`
+ * (`/v/[token]`, see `resolveEncodedPayload`'s own doc comment) instead of
+ * relying on `slug`-based `/p/[slug]`. Decided once, at the moment a row
+ * is first inserted (a fresh save or a duplicate — both are new rows) —
+ * never on `updateQrCode`, since the printed QR's URL choice must stay
+ * fixed for the life of the record once issued, the same way `slug`
+ * itself never changes after creation.
+ */
+function shouldMintPublicToken(mode: QRMode, qrType: QRType, openDirectly: unknown): boolean {
+  return mode === "dynamic" && qrType === "pdf" && openDirectly === true;
+}
+
+/**
  * Server-side gate for creating (or converting to) a dynamic QR — the
  * client never decides this. Skips the count query entirely for an
  * unlimited entitlement (the common case today, since no plan currently
@@ -105,9 +119,12 @@ export async function saveQrCode(input: SaveQrCodeInput): Promise<ActionResult<{
 
   const destinationUrl = resolveDestinationUrl(input, validated.payload);
 
+  const mintToken = shouldMintPublicToken(input.mode, input.qrType, input.content.openDirectly);
+
   let lastError: string | null = null;
   for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
     const slug = input.mode === "dynamic" ? generateRandomSlug() : null;
+    const publicToken = mintToken ? generatePublicToken() : null;
     const { data, error } = await supabase
       .from("qr_codes")
       .insert({
@@ -119,6 +136,7 @@ export async function saveQrCode(input: SaveQrCodeInput): Promise<ActionResult<{
         design_config: input.design,
         destination_url: destinationUrl,
         slug,
+        public_token: publicToken,
       })
       .select("id")
       .single();
@@ -227,9 +245,17 @@ export async function duplicateQrCode(id: string): Promise<ActionResult<{ id: st
     if (allowance.error) return { error: allowance.error };
   }
 
+  const sourcePayload = source.payload_data as Record<string, unknown>;
+  const mintToken = shouldMintPublicToken(
+    source.mode as QRMode,
+    source.qr_type as QRType,
+    sourcePayload?.openDirectly,
+  );
+
   let lastError: string | null = null;
   for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
     const slug = source.mode === "dynamic" ? generateRandomSlug() : null;
+    const publicToken = mintToken ? generatePublicToken() : null;
     const { data, error } = await supabase
       .from("qr_codes")
       .insert({
@@ -241,6 +267,7 @@ export async function duplicateQrCode(id: string): Promise<ActionResult<{ id: st
         design_config: source.design_config,
         destination_url: source.destination_url,
         slug,
+        public_token: publicToken,
         status: "active",
       })
       .select("id")

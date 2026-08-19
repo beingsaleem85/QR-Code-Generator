@@ -83,7 +83,7 @@ afterEach(() => {
 async function renderReady(numPages = 1) {
   mockGetDocumentResolves(numPages);
   const { PdfViewer } = await import("@/components/landing/pdf-viewer/PdfViewer");
-  render(<PdfViewer slug="abc12345" fileName="offer letter.pdf" />);
+  render(<PdfViewer proxyUrl="/api/public-pdf/abc12345" fileName="offer letter.pdf" />);
   await screen.findByText(`1 / ${numPages}`);
 }
 
@@ -97,7 +97,7 @@ describe("PdfViewer — loading and rendering", () => {
       destroy: vi.fn(),
     });
     const { PdfViewer } = await import("@/components/landing/pdf-viewer/PdfViewer");
-    render(<PdfViewer slug="abc12345" fileName="offer.pdf" />);
+    render(<PdfViewer proxyUrl="/api/public-pdf/abc12345" fileName="offer.pdf" />);
 
     expect(screen.getByText("Loading document…")).toBeInTheDocument();
     resolveDoc(makeMockDoc(1));
@@ -107,7 +107,7 @@ describe("PdfViewer — loading and rendering", () => {
   it("shows the sanitized filename in the header once ready", async () => {
     mockGetDocumentResolves(1);
     const { PdfViewer } = await import("@/components/landing/pdf-viewer/PdfViewer");
-    render(<PdfViewer slug="abc12345" fileName="employment offer letter" />);
+    render(<PdfViewer proxyUrl="/api/public-pdf/abc12345" fileName="employment offer letter" />);
 
     await screen.findByText("employment offer letter.pdf");
   });
@@ -117,7 +117,7 @@ describe("PdfViewer — loading and rendering", () => {
     expect(screen.getByText("1 / 4")).toBeInTheDocument();
   });
 
-  it("fetches the document from the same-origin proxy URL, never a Supabase URL", async () => {
+  it("loads the document from exactly the proxyUrl prop it was given, never a Supabase URL", async () => {
     await renderReady(1);
     expect(getDocument).toHaveBeenCalledWith({ url: "/api/public-pdf/abc12345" });
   });
@@ -241,7 +241,7 @@ describe("PdfViewer — error states", () => {
   it("shows a 'no longer available' message when the proxy returns 404", async () => {
     mockGetDocumentRejects(new ResponseExceptionMock("not found", 404));
     const { PdfViewer } = await import("@/components/landing/pdf-viewer/PdfViewer");
-    render(<PdfViewer slug="abc12345" fileName="offer.pdf" />);
+    render(<PdfViewer proxyUrl="/api/public-pdf/abc12345" fileName="offer.pdf" />);
 
     await screen.findByText(/no longer available/i);
   });
@@ -249,7 +249,7 @@ describe("PdfViewer — error states", () => {
   it("shows a generic load-failure message with a working Try again for other failures", async () => {
     mockGetDocumentRejects(new Error("boom"));
     const { PdfViewer } = await import("@/components/landing/pdf-viewer/PdfViewer");
-    render(<PdfViewer slug="abc12345" fileName="offer.pdf" />);
+    render(<PdfViewer proxyUrl="/api/public-pdf/abc12345" fileName="offer.pdf" />);
 
     await screen.findByText(/couldn't open this pdf/i);
 
@@ -265,7 +265,7 @@ describe("PdfViewer — error states", () => {
       new Error("Storage error: bucket qr-documents, signed URL https://x.supabase.co/token=abc"),
     );
     const { PdfViewer } = await import("@/components/landing/pdf-viewer/PdfViewer");
-    render(<PdfViewer slug="abc12345" fileName="offer.pdf" />);
+    render(<PdfViewer proxyUrl="/api/public-pdf/abc12345" fileName="offer.pdf" />);
 
     await screen.findByText(/couldn't open this pdf/i);
     expect(screen.queryByText(/supabase/i)).not.toBeInTheDocument();

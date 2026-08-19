@@ -22,6 +22,17 @@ export function buildLandingPageUrl(slug: string): string {
 }
 
 /**
+ * The opaque-token counterpart to `buildLandingPageUrl` — used instead of
+ * `/p/[slug]` for a PDF QR created with "Open PDF directly" already
+ * enabled, so the printed code encodes a random, non-guessable identifier
+ * (`src/lib/qr/public-token.ts`) rather than the QR's ordinary slug.
+ */
+export function buildPublicViewerUrl(token: string): string {
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  return `${base}/v/${token}`;
+}
+
+/**
  * Defense-in-depth against open-redirect abuse (Module 3.6 requirement):
  * only ever redirect to a well-formed http(s) URL. The `url` QR type's own
  * Zod schema already enforces this at input time, but the redirect route

@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { getQrTypeDefinition } from "@/lib/qr/registry";
-import { buildLandingPageUrl, buildRedirectUrl } from "@/lib/qr/redirect-url";
+import { buildLandingPageUrl, buildPublicViewerUrl, buildRedirectUrl } from "@/lib/qr/redirect-url";
 import type { QRMode, QRType } from "@/types/qr";
 import type { DesignConfig } from "@/types/qr-design";
 
@@ -33,14 +33,25 @@ export function buildQrPayload(qrType: QRType, content: Record<string, unknown>)
  * starting a new dynamic QR and its first save (no slug has been issued
  * yet); callers treat that as "nothing to render yet", same as invalid
  * content.
+ *
+ * `publicToken` takes priority over `slug` for a PDF QR specifically —
+ * `/v/[token]` instead of `/p/[slug]`, so nothing about the printed code
+ * (filename, database id, ownership) is inferable from it. Only ever set
+ * for a PDF QR that had "Open PDF directly" on at creation time, and
+ * — like `slug` — is fixed for the life of the record once issued; gated
+ * on `qrType === "pdf"` here so a QR whose type later changes away from
+ * "pdf" via edit falls back to its ordinary slug-based URL instead of
+ * pointing at a viewer route that would no longer resolve it.
  */
 export function resolveEncodedPayload(
   mode: QRMode,
   qrType: QRType,
   content: Record<string, unknown>,
   slug?: string | null,
+  publicToken?: string | null,
 ): string | null {
   if (mode === "dynamic") {
+    if (publicToken && qrType === "pdf") return buildPublicViewerUrl(publicToken);
     if (!slug) return null;
     return getQrTypeDefinition(qrType).needsLandingPage
       ? buildLandingPageUrl(slug)

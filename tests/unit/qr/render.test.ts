@@ -66,6 +66,30 @@ describe("resolveEncodedPayload", () => {
     const withInvalidContent = resolveEncodedPayload("dynamic", "url", {}, "abc12345");
     expect(withInvalidContent).toMatch(/\/r\/abc12345$/);
   });
+
+  it("encodes /v/[token] instead of /p/[slug] for a PDF QR with a public token", () => {
+    const payload = resolveEncodedPayload("dynamic", "pdf", {}, "abc12345", "aBcDeFgHiJkLmNoP");
+    expect(payload).toMatch(/\/v\/aBcDeFgHiJkLmNoP$/);
+    expect(payload).not.toContain("/p/");
+    expect(payload).not.toContain("abc12345");
+  });
+
+  it("falls back to /p/[slug] for a PDF QR with no public token", () => {
+    const payload = resolveEncodedPayload("dynamic", "pdf", {}, "abc12345", null);
+    expect(payload).toMatch(/\/p\/abc12345$/);
+  });
+
+  it("ignores a public token for a non-PDF type — a token predating a type change doesn't hijack the URL", () => {
+    const payload = resolveEncodedPayload(
+      "dynamic",
+      "url",
+      { url: "https://example.com" },
+      "abc12345",
+      "aBcDeFgHiJkLmNoP",
+    );
+    expect(payload).toMatch(/\/r\/abc12345$/);
+    expect(payload).not.toContain("/v/");
+  });
 });
 
 describe("renderQrSvg / renderQrPngDataUrl", () => {

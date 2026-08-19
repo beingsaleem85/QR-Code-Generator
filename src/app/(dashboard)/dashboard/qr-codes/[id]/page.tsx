@@ -9,7 +9,6 @@ import { Card } from "@/components/ui/Card";
 import { QrPlaceholderGraphic } from "@/components/ui/QrPlaceholderGraphic";
 import { getQrTypeDefinition } from "@/lib/qr/registry";
 import { resolveEncodedPayload } from "@/lib/qr/render";
-import { buildLandingPageUrl, buildRedirectUrl } from "@/lib/qr/redirect-url";
 import { deriveDestinationSummary } from "@/lib/qr/records";
 import { getQrCodeById, listQrFeedback } from "@/lib/qr/queries";
 import { renderStyledQrSvg } from "@/lib/qr/styled-svg";
@@ -35,6 +34,7 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
     qrCode.qrType,
     qrCode.payloadData,
     qrCode.slug,
+    qrCode.publicToken,
   );
   const preview = payload ? await renderStyledQrSvg(payload, qrCode.designConfig) : null;
 
@@ -73,6 +73,7 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
             design={qrCode.designConfig}
             name={qrCode.name}
             slug={qrCode.slug}
+            publicToken={qrCode.publicToken}
           />
         </Card>
 
@@ -93,16 +94,12 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
               <p className="text-sm break-all text-foreground">{destinationSummary}</p>
             </div>
 
-            {qrCode.mode === "dynamic" && qrCode.slug ? (
+            {qrCode.mode === "dynamic" && payload ? (
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase">
                   Printed QR links to
                 </p>
-                <p className="text-sm break-all text-foreground">
-                  {typeDefinition.needsLandingPage
-                    ? buildLandingPageUrl(qrCode.slug)
-                    : buildRedirectUrl(qrCode.slug)}
-                </p>
+                <p className="text-sm break-all text-foreground">{payload}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   This link never changes — edit the content above to update it without reprinting
                   the code.
