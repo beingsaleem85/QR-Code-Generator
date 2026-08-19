@@ -24,15 +24,24 @@
 -- keeping three separate application-level checks in sync, and without
 -- creating a second, competing definition of the quota.
 --
--- Concurrency: locks the account's own entitlement row with `for update`
--- before counting, so two concurrent dynamic-QR-creation requests from
--- the same user serialize against each other — the second waits for the
--- first's transaction to commit, then re-reads the count including the
--- first's newly-committed row, instead of both reading the same
--- pre-insert count and both passing. Different users never contend with
--- each other's inserts, since each only locks their own entitlement row.
--- A user with no entitlement row at all skips the lock entirely (nothing
--- to serialize against), since a missing row already means unlimited.
+-- Concurrency: takes a transaction-scoped advisory lock keyed by the
+-- user's id before counting, so two concurrent dynamic-QR-creation
+-- requests from the same user serialize against each other — the second
+-- waits for the first's transaction to commit, then re-reads the count
+-- including the first's newly-committed row, instead of both reading the
+-- same pre-insert count and both passing. Different users never contend
+-- with each other's inserts, since each only locks its own key.
+--
+-- This is an advisory lock, not `select ... for update` on
+-- account_entitlements — that table deliberately has no UPDATE policy at
+-- all (nothing may ever write to it except a privileged out-of-band
+-- operation, see 20260819120000_create_account_entitlements.sql), and
+-- Postgres RLS requires an UPDATE-permitting policy to lock a row via
+-- `for update`/`for share` even when nothing is actually being updated —
+-- without one, the locking SELECT silently returns zero rows regardless
+-- of the SELECT policy, which would make every account look unlimited.
+-- An advisory lock isn't a row lock and isn't subject to any table's RLS
+-- policies, so it has no such requirement.
 create or replace function public.enforce_dynamic_qr_quota()
 returns trigger
 language plpgsql
@@ -53,10 +62,11 @@ begin
     return new;
   end if;
 
+  perform pg_advisory_xact_lock(hashtextextended(new.user_id::text, 0));
+
   select dynamic_qr_limit into v_limit
   from public.account_entitlements
-  where user_id = new.user_id
-  for update;
+  where user_id = new.user_id;
 
   if not found or v_limit is null then
     return new;
