@@ -78,3 +78,38 @@ describe("proxy — canonical host redirect", () => {
     expect(response.headers.get("location")).toBe("https://qrforge.space/");
   });
 });
+
+describe("proxy — auth-only route gating", () => {
+  it("never redirects an already-authenticated visitor away from /login — every visit must show the real form", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
+    const { proxy } = await import("@/proxy");
+    const request = makeRequest("https://qrforge.space/login");
+
+    const response = await proxy(request);
+
+    expect(response.status).not.toBe(307);
+    expect(response.status).not.toBe(308);
+  });
+
+  it("still redirects an already-authenticated visitor away from /signup to /dashboard", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
+    const { proxy } = await import("@/proxy");
+    const request = makeRequest("https://qrforge.space/signup");
+
+    const response = await proxy(request);
+
+    expect(response.headers.get("location")).toBe("https://qrforge.space/dashboard");
+  });
+
+  it("redirects an unauthenticated visitor away from /dashboard to /login with a redirectTo", async () => {
+    getUser.mockResolvedValue({ data: { user: null } });
+    const { proxy } = await import("@/proxy");
+    const request = makeRequest("https://qrforge.space/dashboard/qr-codes");
+
+    const response = await proxy(request);
+
+    expect(response.headers.get("location")).toBe(
+      "https://qrforge.space/login?redirectTo=%2Fdashboard%2Fqr-codes",
+    );
+  });
+});

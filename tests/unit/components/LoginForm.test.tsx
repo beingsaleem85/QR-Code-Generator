@@ -69,6 +69,17 @@ describe("LoginForm", () => {
     });
   });
 
+  it("shows a Remember me checkbox, checked by default and togglable", async () => {
+    const user = userEvent.setup();
+    render(<LoginForm />);
+
+    const checkbox = screen.getByRole("checkbox", { name: "Remember me" });
+    expect(checkbox).toBeChecked();
+
+    await user.click(checkbox);
+    expect(checkbox).not.toBeChecked();
+  });
+
   it("shows a real error alert and re-enables the form when Supabase rejects the credentials", async () => {
     signInWithPasswordMock.mockResolvedValueOnce({
       data: { user: null, session: null },

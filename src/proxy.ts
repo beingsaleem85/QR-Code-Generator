@@ -2,7 +2,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 const PROTECTED_PREFIX = "/dashboard";
-const AUTH_ONLY_ROUTES = ["/login", "/signup"];
+// "/login" is deliberately not in this list: every visit to /login must
+// show the real form and go through LoginForm's own signInWithPassword
+// call, even when a valid session cookie already exists — clicking "Log
+// in" should never silently skip straight to the dashboard for whichever
+// account happens to still have a session in the browser. "/signup" keeps
+// the normal bounce-away-if-already-authenticated behavior, since
+// re-registering while signed in isn't a real flow.
+const AUTH_ONLY_ROUTES = ["/signup"];
 
 /**
  * `qrforge.space` is this app's single canonical production domain — these
