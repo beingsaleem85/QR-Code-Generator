@@ -314,3 +314,65 @@ None found. Every primary user journey works end-to-end in production.
 ## Testing depth note
 
 "Live" throughout this matrix means a real Playwright browser session against `https://qrforge.space`'s actual deployed code and the real linked Supabase project — temporary accounts, real signups, real saves, real Storage objects, real RLS enforcement — not mocks. "Code" means source/schema inspection without a corresponding live click-through this audit; those items are marked PARTIAL rather than PASS wherever the audit brief's PASS bar (end-to-end in production) wasn't actually met. Nothing in this report was marked PASS solely because a unit test exists for it.
+
+---
+
+## Remediation History (2026-08-20, same day)
+
+A strict, sequential remediation program worked through the findings above in this order, each step fully gated (root cause → fix → focused tests → full suite → TypeScript/ESLint/Prettier → production build → secret scan → commit → push → Vercel deploy to `qrforge.space` → live production verification → cleanup) before the next began. Full step-by-step detail, commit SHAs, and per-item evidence: `docs/PRODUCTION_REMEDIATION_PROGRESS.md` and `docs/PARTIAL_REMEDIATION_QUEUE.md`.
+
+1. **Change Password** (new feature — no matrix row previously existed for it, since it was a permanently disabled button, not a tracked check). Implemented via Supabase Auth's `updateUser({ password })`, the same call the existing reset-password flow already uses; no current-password field, since this project's Auth settings don't require one. Commit `bdb3930`.
+2. **Event QR — blank optional end-date bug** (was `FAIL`). Root cause: Zod's `.optional()` only exempts `undefined`, but the form always submits `""` for a blank field, so the date-format check ran (and failed) on an empty string every time. Commit `8923143`.
+3. **Feedback QR — untouched-defaults save bug** (was `PARTIAL`, HIGH severity). Root cause: react-hook-form's `watch()` callback never fires with the form's own initial `defaultValues` on mount, so a user who accepted every (already-valid) default and saved immediately submitted stale/empty content. Commit `ba115fb`.
+4. **2D Barcode / Location — internal doc leak** (both `FAIL`). No product specification exists for either type anywhere in the repository (checked the master build prompt itself) — both are now rendered disabled with a "Coming soon" badge in the actual generator, matching the marketing page's own honest labeling, instead of falling through to a placeholder that leaked `docs/ARCHITECTURE.md`. Commit `155c747`.
+5. **Dynamic QR quota — database-level enforcement** (was `FAIL`, MEDIUM severity gap). Added a `BEFORE INSERT OR UPDATE` trigger on `qr_codes`. A first version was itself found broken by this step's own live concurrency testing (`SELECT ... FOR UPDATE` silently finds no rows when the target table has no UPDATE-permitting RLS policy, which `account_entitlements` deliberately doesn't) and corrected to use a transaction-scoped advisory lock instead — caught and fixed before the step was recorded complete. Commits `d8c8ab0`, `e85242e`.
+6. **All 35 original PARTIAL items**, processed one by one against a frozen queue (`docs/PARTIAL_REMEDIATION_QUEUE.md`, P-01–P-35): 33 converted to `PASS` (1 fixed in step 3 above, 2 fixed with real code changes — orphaned-Storage-on-partial-delete-failure and post-delete redirect UX, commits `79cac86` and `a43dec5` — and 30 confirmed already working correctly via live testing, no code change needed). 2 remain `PARTIAL`: Email/SMTP delivery (`BLOCKED_EXTERNAL` — needs the project owner to check Supabase's SMTP configuration directly, not verifiable from this environment) and Invalid-URL blur validation (a confirmed, reproducible, low-severity gap — the field-level inline hint doesn't render in the compiled production build, though the save-time check still correctly blocks bad data — tied to a shared react-hook-form/React-Compiler interaction across roughly a dozen content forms; fixing that shared pattern was judged a disproportionately broad change for one LOW-severity cosmetic gap, so it's documented rather than fixed).
+
+A final regression pass re-ran the full existing Playwright journey suite (A–F) against the fully remediated production deployment, plus a combined check exercising every fix together (Design + bottom Save + Event + Feedback + 2D Barcode + Change Password in one flow) — all passed, zero console errors, and standard security response headers (`nosniff`, `SAMEORIGIN`, HSTS, CSP) were confirmed present. `mts.pk@hotmail.com` was read-only verified unchanged throughout the entire program (`plan=pro, is_lifetime=true, expires_at=null, dynamic_qr_limit=null`, `last_sign_in_at` untouched).
+
+## Post-Remediation Audit
+
+**Before** (2026-08-20 baseline, this document's original audit):
+
+```text
+212 total
+171 PASS
+35 PARTIAL
+4 FAIL
+2 NOT IMPLEMENTED
+```
+
+**After** (same day, post-remediation — computed by walking every original FAIL/PARTIAL row to its actual current status, not estimated):
+
+```text
+213 total   (+1: the newly-implemented Change Password feature)
+209 PASS    (98.1%)
+2 PARTIAL   (0.9%)
+0 FAIL      (0.0%)
+2 NOT IMPLEMENTED (0.9%, unchanged — Pricing, still an intentional placeholder)
+```
+
+**Status changes, by original row:**
+
+| Item | Before | After | Why |
+|---|---|---|---|
+| Change Password | *(not tracked)* | PASS | New feature, implemented and production-verified |
+| Event (end-date) | FAIL | PASS | Fixed, commit `8923143` |
+| Feedback (save step) | PARTIAL | PASS | Fixed, commit `ba115fb` |
+| 2D Barcode | FAIL | PASS | Fixed, commit `155c747` |
+| Location | FAIL | PASS | Fixed, commit `155c747` |
+| Quota enforcement (DB layer) | FAIL | PASS | Fixed, commits `d8c8ab0`/`e85242e` |
+| Orphan Storage objects (failure path) | PARTIAL (gap) | PASS | Fixed, commit `79cac86` |
+| Post-delete UX from detail page | PARTIAL (minor) | PASS | Fixed, commit `a43dec5` |
+| 30 other PARTIAL items (P-06–P-35) | PARTIAL | PASS | Live-verified working correctly; no code change needed |
+| Email/SMTP delivery | PARTIAL | **PARTIAL (unchanged)** | `BLOCKED_EXTERNAL` — owner must check Supabase dashboard SMTP config |
+| Invalid URL (blur validation) | PARTIAL | **PARTIAL (unchanged)** | Genuine low-severity gap found and documented, not fixed (disproportionate scope) |
+| Pricing (checkout) | NOT IMPLEMENTED | **NOT IMPLEMENTED (unchanged)** | Intentional, honestly-disclosed product placeholder — out of scope |
+
+**What remains, explicitly:**
+- **PARTIAL (2):** Email/SMTP delivery (external blocker — see `docs/PARTIAL_REMEDIATION_QUEUE.md` P-02 for the exact owner action needed); Invalid-URL inline blur hint (documented, low-severity, no data-integrity impact — a good candidate for a dedicated follow-up if the owner wants the shared react-hook-form pattern investigated).
+- **FAIL (0).**
+- **NOT IMPLEMENTED (2, both the same Pricing/checkout fact):** a deliberate, transparently-labeled product decision, not a defect.
+- **BLOCKED_EXTERNAL (1):** Email/SMTP, as above — genuinely outside what this session can verify or fix.
+
+This is not 100%, and isn't presented as such: two real, low-severity items remain open, one of them requiring the project owner's own action outside this codebase.

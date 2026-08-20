@@ -20,7 +20,7 @@ FINAL STEP — Complete re-audit
 
 ## Status
 
-IN PROGRESS
+COMPLETE
 
 ---
 
@@ -104,4 +104,11 @@ IN PROGRESS
 - Status: **COMPLETE**
 
 ### FINAL STEP — Complete re-audit
-- Status: **NOT STARTED**
+- Re-ran the full existing Playwright journey suite (A–F) against the final production deployment — all 6 pass, no regression.
+- Ran a combined check exercising every fix from this program together in one flow (Design section + bottom Save + Event blank-end-date + Feedback untouched-defaults + 2D Barcode disabled + Change Password UI present) — all correct, zero console errors, standard security headers present (`nosniff`, `SAMEORIGIN`, HSTS, CSP).
+- Updated `docs/PRODUCTION_FEATURE_AUDIT.md` with a "Remediation History" section and a "Post-Remediation Audit" section — before/after totals computed by walking every original FAIL/PARTIAL row to its actual current status (not estimated). Original 212-check baseline preserved unchanged above the new sections.
+- **Before:** 212 total, 171 PASS, 35 PARTIAL, 4 FAIL, 2 NOT IMPLEMENTED.
+- **After:** 213 total (+1 for the new Change Password feature), 209 PASS (98.1%), 2 PARTIAL (0.9% — Email/SMTP blocked-external, invalid-URL blur hint documented-not-fixed), 0 FAIL, 2 NOT IMPLEMENTED (unchanged — Pricing, an intentional placeholder).
+- Final temp-data sweep: 7 leftover accounts deleted, `mailer_autoconfirm` restored to `false`.
+- Permanent account re-confirmed unchanged: `plan=pro, is_lifetime=true, expires_at=null, dynamic_qr_limit=null`, `last_sign_in_at` untouched throughout the entire program.
+- Status: **COMPLETE**
