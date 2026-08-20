@@ -19,7 +19,7 @@ interface QRCodeCardProps {
  */
 export function QRCodeCard({ qrCode, folders = [] }: QRCodeCardProps) {
   return (
-    <Card className="flex flex-col gap-2 p-4">
+    <Card className="flex flex-col gap-2.5 p-4 transition-shadow duration-150 hover:shadow-lg">
       <div className="flex items-start justify-between gap-2">
         <Link
           href={`/dashboard/qr-codes/${qrCode.id}`}
@@ -29,7 +29,7 @@ export function QRCodeCard({ qrCode, folders = [] }: QRCodeCardProps) {
         </Link>
         <QRCodeStatusBadge status={qrCode.status} />
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground capitalize">
         {qrCode.qrType} &middot; {qrCode.mode} &middot; {qrCode.scanCount} scans
       </p>
       {folders.length > 0 ? (

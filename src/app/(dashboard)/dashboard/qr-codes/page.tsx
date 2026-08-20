@@ -7,6 +7,7 @@ import { QRCodesFilterBar } from "@/components/dashboard/QRCodesFilterBar";
 import { FolderManager } from "@/components/dashboard/FolderManager";
 import { Pagination } from "@/components/dashboard/Pagination";
 import { buttonVariants } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { listQrCodesPage } from "@/lib/qr/queries";
 import { parseQrListSearchParams, type QrListSearchParams } from "@/lib/qr/list-filters";
 import { listMyFolders } from "@/lib/folders/queries";
@@ -67,9 +68,9 @@ export default async function QrCodesListPage({ searchParams }: QrCodesListPageP
           />
         ) : (
           <>
-            <div className="hidden overflow-x-auto md:block">
+            <Card className="hidden overflow-x-auto md:block">
               <QRCodeTable qrCodes={items} folders={folders} />
-            </div>
+            </Card>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">
               {items.map((qrCode) => (
                 <QRCodeCard key={qrCode.id} qrCode={qrCode} folders={folders} />

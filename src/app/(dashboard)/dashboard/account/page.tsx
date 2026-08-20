@@ -1,3 +1,4 @@
+import { CreditCard, KeyRound, UserRound } from "lucide-react";
 import { AccountProfileForm } from "@/components/account/AccountProfileForm";
 import { ChangePasswordForm } from "@/components/account/ChangePasswordForm";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
@@ -21,8 +22,14 @@ export default async function AccountPage() {
     <div className="flex flex-col gap-6">
       <DashboardHeader title="Account" />
 
-      <div className="flex flex-col gap-4 px-4 pb-6 sm:px-6 lg:max-w-lg">
+      <div className="flex flex-col gap-4 px-4 pb-6 sm:px-6 lg:max-w-xl">
         <Card className="flex flex-col gap-4 p-5">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <UserRound size={16} aria-hidden="true" />
+            </span>
+            <h2 className="text-sm font-semibold text-foreground">Profile</h2>
+          </div>
           <div className="flex items-center gap-4">
             <Avatar name={displayLabel} avatarUrl={profile.avatarUrl} />
             <div>
@@ -39,7 +46,12 @@ export default async function AccountPage() {
 
         <Card className="flex flex-col gap-3 p-5">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-foreground">Plan</p>
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <CreditCard size={16} aria-hidden="true" />
+              </span>
+              <p className="text-sm font-semibold text-foreground">Plan</p>
+            </div>
             <span
               className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                 entitlement.plan === "pro"
@@ -66,7 +78,12 @@ export default async function AccountPage() {
         </Card>
 
         <Card className="flex flex-col gap-4 p-5">
-          <p className="text-sm font-medium text-foreground">Password &amp; security</p>
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <KeyRound size={16} aria-hidden="true" />
+            </span>
+            <h2 className="text-sm font-semibold text-foreground">Password &amp; security</h2>
+          </div>
           <ChangePasswordForm />
         </Card>
       </div>

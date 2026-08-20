@@ -43,6 +43,22 @@ const DYNAMIC_ONLY_REASON: Partial<Record<QRType, string>> = {
     "Feedback QR codes use Dynamic mode since they collect submissions through a hosted page.",
 };
 
+/** A small numbered eyebrow label — purely visual signposting to convey the
+ * type → content/design → save flow at a glance, without turning the
+ * single-page workflow into an actual paginated wizard. */
+function SectionEyebrow({ step, label }: { step: number; label: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+        {step}
+      </span>
+      <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 function firstSupportedType(mode: QRMode): QRType {
   const supported = listQrTypeDefinitions().filter((definition) =>
     mode === "static" ? definition.staticSupport : definition.dynamicSupport,
@@ -219,11 +235,16 @@ export function QRGeneratorShell({
         <QRNameField name={name} onNameChange={setName} />
       </div>
 
-      <QRTypeSelector mode={mode} selectedType={qrType} onTypeChange={handleTypeChange} />
+      <div className="flex flex-col gap-3">
+        <SectionEyebrow step={1} label="Choose a type" />
+        <QRTypeSelector mode={mode} selectedType={qrType} onTypeChange={handleTypeChange} />
+      </div>
 
       {DYNAMIC_ONLY_REASON[qrType] ? (
         <Alert variant="info">{DYNAMIC_ONLY_REASON[qrType]}</Alert>
       ) : null}
+
+      <SectionEyebrow step={2} label="Add content & customize" />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
         <div className="flex flex-col gap-4">
@@ -257,8 +278,9 @@ export function QRGeneratorShell({
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-surface p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="rounded-xl border border-primary/20 bg-surface p-5 shadow-md">
+        <SectionEyebrow step={3} label="Save & download" />
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-sm font-semibold text-foreground">QR ready</h2>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -267,7 +289,12 @@ export function QRGeneratorShell({
                 : "Everything above is saved to your account once you save."}
             </p>
           </div>
-          <Button className="w-full sm:w-auto" onClick={handleSave} disabled={saveDisabled}>
+          <Button
+            size="lg"
+            className="w-full sm:w-auto"
+            onClick={handleSave}
+            disabled={saveDisabled}
+          >
             {saveLabel}
           </Button>
         </div>

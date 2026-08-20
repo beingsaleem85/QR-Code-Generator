@@ -36,7 +36,7 @@ export function QRTypeSelector({ mode, selectedType, onTypeChange }: QRTypeSelec
     <div
       role="listbox"
       aria-label="QR type"
-      className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6"
+      className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6"
     >
       {types.map((definition) => {
         const Icon = QR_TYPE_ICONS[definition.icon];
@@ -54,12 +54,12 @@ export function QRTypeSelector({ mode, selectedType, onTypeChange }: QRTypeSelec
             disabled={comingSoon}
             title={comingSoon ? `${definition.label} — coming soon` : definition.label}
             onClick={comingSoon ? undefined : () => onTypeChange(definition.key)}
-            className={`relative flex flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-center transition-colors ${
+            className={`group relative flex flex-col items-center gap-2 rounded-xl border px-2 py-3.5 text-center shadow-sm transition-all duration-150 ${
               comingSoon
-                ? "cursor-not-allowed border-border bg-surface text-muted-foreground opacity-60"
+                ? "cursor-not-allowed border-border bg-surface text-muted-foreground opacity-60 shadow-none"
                 : selected
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-surface text-foreground hover:border-primary hover:text-primary"
+                  ? "border-primary bg-primary text-primary-foreground shadow-md"
+                  : "border-border bg-surface text-foreground hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
             }`}
           >
             {comingSoon ? (
@@ -76,12 +76,26 @@ export function QRTypeSelector({ mode, selectedType, onTypeChange }: QRTypeSelec
               // own E2E suite included) queries options by that label.
               <span
                 aria-hidden="true"
-                className="absolute top-1 right-1 rounded-full border border-border bg-background px-1.5 py-0.5 text-[9px] leading-none font-semibold tracking-wide text-muted-foreground uppercase"
+                className={`absolute top-1 right-1 rounded-full border px-1.5 py-0.5 text-[9px] leading-none font-semibold tracking-wide uppercase ${
+                  selected
+                    ? "border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground"
+                    : "border-border bg-background text-muted-foreground"
+                }`}
               >
                 Dynamic
               </span>
             ) : null}
-            {Icon ? <Icon size={20} aria-hidden="true" /> : null}
+            {Icon ? (
+              <span
+                className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors duration-150 ${
+                  selected
+                    ? "bg-primary-foreground/15 text-primary-foreground"
+                    : "bg-primary/8 text-primary group-hover:bg-primary/12"
+                }`}
+              >
+                <Icon size={18} aria-hidden="true" />
+              </span>
+            ) : null}
             <span className="text-xs leading-tight font-medium">{definition.label}</span>
           </button>
         );

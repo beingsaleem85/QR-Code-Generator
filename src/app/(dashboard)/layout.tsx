@@ -18,7 +18,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
       </div>
 
       <div className="flex flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3 md:hidden">
+        <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3 md:hidden">
           <Logo />
           <MobileNavDrawer
             links={DASHBOARD_NAV_ITEMS}

@@ -70,7 +70,13 @@ export function QRPreviewPanel({
 
   return (
     <Card className="flex flex-col items-center gap-4 p-6">
-      <div className="flex aspect-square w-full max-w-[220px] items-center justify-center rounded-lg border border-border bg-background p-3">
+      <div className="flex w-full items-center justify-between">
+        <h2 className="text-sm font-semibold text-foreground">Preview</h2>
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+          Live
+        </span>
+      </div>
+      <div className="flex aspect-square w-full max-w-[220px] items-center justify-center rounded-lg border border-border bg-background p-3 shadow-sm">
         {current ? (
           <div
             role="img"

@@ -44,7 +44,7 @@ export function DesignFrameControls({ value, onChange }: DesignFrameControlsProp
           type="color"
           value={value.color}
           onChange={(event) => onChange({ ...value, color: event.target.value })}
-          className="h-10 w-16 rounded-lg border border-border"
+          className="h-10 w-10 cursor-pointer rounded-lg border border-border shadow-sm transition-transform duration-150 hover:scale-105"
         />
       </FormField>
     </div>
@@ -97,7 +97,7 @@ export function DesignEyeControls({ value, onChange }: DesignEyeControlsProps) {
           type="color"
           value={value.cornerSquareColor}
           onChange={(event) => onChange({ ...value, cornerSquareColor: event.target.value })}
-          className="h-10 w-16 rounded-lg border border-border"
+          className="h-10 w-10 cursor-pointer rounded-lg border border-border shadow-sm transition-transform duration-150 hover:scale-105"
         />
       </FormField>
       <FormField label="Corner dot style" htmlFor="eye-dot-style">
@@ -117,7 +117,7 @@ export function DesignEyeControls({ value, onChange }: DesignEyeControlsProps) {
           type="color"
           value={value.cornerDotColor}
           onChange={(event) => onChange({ ...value, cornerDotColor: event.target.value })}
-          className="h-10 w-16 rounded-lg border border-border"
+          className="h-10 w-10 cursor-pointer rounded-lg border border-border shadow-sm transition-transform duration-150 hover:scale-105"
         />
       </FormField>
     </div>
@@ -139,7 +139,7 @@ export function DesignColorControls({ value, onChange }: DesignColorControlsProp
             type="color"
             value={value.foreground}
             onChange={(event) => onChange({ ...value, foreground: event.target.value })}
-            className="h-10 w-16 rounded-lg border border-border"
+            className="h-10 w-10 cursor-pointer rounded-lg border border-border shadow-sm transition-transform duration-150 hover:scale-105"
           />
         </FormField>
         <FormField label="Background" htmlFor="color-background">
@@ -149,16 +149,23 @@ export function DesignColorControls({ value, onChange }: DesignColorControlsProp
             value={value.background}
             onChange={(event) => onChange({ ...value, background: event.target.value })}
             disabled={value.transparentBackground}
-            className="h-10 w-16 rounded-lg border border-border disabled:opacity-50"
+            className="h-10 w-10 cursor-pointer rounded-lg border border-border shadow-sm transition-transform duration-150 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
           />
         </FormField>
       </div>
-      <label className="flex items-center gap-2 text-sm text-foreground">
-        <input
-          type="checkbox"
-          checked={value.transparentBackground}
-          onChange={(event) => onChange({ ...value, transparentBackground: event.target.checked })}
-        />
+      <label className="flex cursor-pointer items-center gap-3 text-sm text-foreground select-none">
+        <span className="relative inline-flex h-5 w-9 shrink-0 items-center">
+          <input
+            type="checkbox"
+            checked={value.transparentBackground}
+            onChange={(event) =>
+              onChange({ ...value, transparentBackground: event.target.checked })
+            }
+            className="peer sr-only"
+          />
+          <span className="absolute inset-0 rounded-full bg-border transition-colors duration-150 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary/30 peer-focus-visible:ring-offset-2" />
+          <span className="relative h-4 w-4 translate-x-0.5 rounded-full bg-surface shadow-sm transition-transform duration-150 peer-checked:translate-x-[18px]" />
+        </span>
         Transparent background
       </label>
     </div>
@@ -233,12 +240,17 @@ export function DesignLogoControls({ value, onChange }: DesignLogoControlsProps)
           onChange={(event) => onChange({ ...value, sizeRatio: Number(event.target.value) })}
         />
       </FormField>
-      <label className="flex items-center gap-2 text-sm text-foreground">
-        <input
-          type="checkbox"
-          checked={value.whiteMargin}
-          onChange={(event) => onChange({ ...value, whiteMargin: event.target.checked })}
-        />
+      <label className="flex cursor-pointer items-center gap-3 text-sm text-foreground select-none">
+        <span className="relative inline-flex h-5 w-9 shrink-0 items-center">
+          <input
+            type="checkbox"
+            checked={value.whiteMargin}
+            onChange={(event) => onChange({ ...value, whiteMargin: event.target.checked })}
+            className="peer sr-only"
+          />
+          <span className="absolute inset-0 rounded-full bg-border transition-colors duration-150 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary/30 peer-focus-visible:ring-offset-2" />
+          <span className="relative h-4 w-4 translate-x-0.5 rounded-full bg-surface shadow-sm transition-transform duration-150 peer-checked:translate-x-[18px]" />
+        </span>
         White margin behind logo
       </label>
     </div>

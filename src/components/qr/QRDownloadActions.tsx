@@ -97,7 +97,7 @@ export function QRDownloadActions({
           ))}
         </Select>
       </FormField>
-      <Button variant="secondary" disabled={disabled} onClick={handleDownloadPng}>
+      <Button disabled={disabled} onClick={handleDownloadPng}>
         {downloading === "png" ? "Preparing PNG..." : "Download PNG"}
       </Button>
 

@@ -13,8 +13,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     <input
       ref={ref}
       aria-invalid={invalid || undefined}
-      className={`h-10 rounded-lg border bg-surface px-3 text-sm text-foreground placeholder:text-muted-foreground ${
-        invalid ? "border-destructive" : "border-border"
+      className={`h-10 rounded-lg border bg-surface px-3 text-sm text-foreground shadow-sm transition-colors duration-150 placeholder:text-muted-foreground focus:ring-2 focus:ring-offset-0 ${
+        invalid
+          ? "border-destructive focus:ring-destructive/20"
+          : "border-border hover:border-foreground/20 focus:border-primary focus:ring-primary/15"
       } ${className ?? ""}`}
       {...props}
     />
