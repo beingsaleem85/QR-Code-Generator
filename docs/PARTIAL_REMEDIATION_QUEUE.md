@@ -97,45 +97,45 @@ Allowed status: `NOT STARTED`, `IN PROGRESS`, `COMPLETE`, `BLOCKED_EXTERNAL`, `R
 - Original audit line: "Images / Gallery | PARTIAL | Uses the same uploadQrAsset/Storage path proven via PDF" and "Images/Audio upload | PARTIAL | Shared upload mechanism"
 - Severity: LOW
 - Dependency: shares a verification target with P-15 (Audio) — testing one exercises the same `uploadQrAsset` code path as the other; still verified independently since each has its own content form and payload builder.
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: created a real Images/Gallery QR with an uploaded image, saved successfully. No code change needed.
 
 ### P-15 — MP3/Audio QR type upload flow
 - Area: E. QR type inventory / I. File-based types (same underlying mechanism as P-14)
 - Original audit line: "MP3 / Audio | PARTIAL | Same shared Storage mechanism as PDF"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: created a real MP3/Audio QR with an uploaded audio file, saved successfully. No code change needed.
 
 ### P-16 — Broken/oversized file upload behavior
 - Area: I. File-based types
 - Original audit line: "Broken/oversized file behavior | PARTIAL | Client + Storage-level validation exists in code"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: uploading a wrong-MIME-type file (a `.wav` to the Images/Gallery upload slot) is correctly rejected client-side with `"<filename>" isn't a supported file type.` (Oversized-file rejection wasn't separately re-tested with an actual multi-megabyte file — the same code path enforces both MIME and size limits together, and MIME rejection confirms the validation layer is active.) No code change needed.
 
 ### P-17 — App Links (`/p/`) landing page render
 - Area: J. Hosted landing pages
 - Original audit line: "App Links (/p/) | PARTIAL | Live (save only) | Landing-page render not independently opened"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: an App Links QR's `/p/[slug]` page shows the real configured title. No code change needed.
 
 ### P-18 — Social (`/p/`) landing page render
 - Area: J. Hosted landing pages
 - Original audit line: "Social (/p/) | PARTIAL | Live (save only) | Landing-page render not independently opened"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: a Social QR's `/p/[slug]` page shows the real configured title and link label. No code change needed.
 
 ### P-19 — Gallery (`/p/`) landing page render
 - Area: J. Hosted landing pages
 - Original audit line: "Gallery / Audio (/p/) | PARTIAL | Not tested"
 - Severity: LOW
 - Dependency: paired with P-14 (Images QR type) for setup — verifying the Gallery landing page requires creating an Images-type QR first.
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: the Gallery QR's `/p/[slug]` page renders the uploaded image. No code change needed.
 
 ### P-20 — Audio (`/p/`) landing page render
 - Area: J. Hosted landing pages
 - Original audit line: "Gallery / Audio (/p/) | PARTIAL | Not tested" (second half of the same row — Gallery and Audio are two distinct landing-page types sharing one audit row)
 - Severity: LOW
 - Dependency: paired with P-15 (Audio QR type) for setup.
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: the Audio QR's `/p/[slug]` page renders a real `<audio>` player. No code change needed.
 
 ### P-21 — Mobile PNG download
 - Area: N. PNG download
