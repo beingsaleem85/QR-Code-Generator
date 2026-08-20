@@ -16,7 +16,7 @@ Starting commit: `ea64621` (audit report)
 
 ## Current Step
 
-STEP 6 — 35 PARTIAL audit items
+FINAL STEP — Complete re-audit
 
 ## Status
 
@@ -98,12 +98,10 @@ IN PROGRESS
 
 ### STEP 6 — 35 PARTIAL audit items
 - Queue: `docs/PARTIAL_REMEDIATION_QUEUE.md` (frozen, commit `6d462cd`)
-- P-01 (Feedback save): RESOLVED_BY_PRIOR_STEP (Step 3, commit `ba115fb`)
-- P-02 (Email/SMTP delivery): BLOCKED_EXTERNAL — see queue file for the exact owner action needed
-- P-03 (orphan Storage on partial delete failure): COMPLETE — commit `79cac86`, Vercel `m3axdq9de`, production-verified
-- P-04 (post-delete UX from detail page): COMPLETE — commit `a43dec5`, Vercel `hc4yj4ap3`, production-verified
-- P-05 through P-35: IN PROGRESS — see `docs/PARTIAL_REMEDIATION_QUEUE.md` for live status of each
-- Status: **IN PROGRESS**
+- Final tally: **32 COMPLETE** (live-verified, mostly no code change needed — the original PARTIAL was "not tested," not a real defect), **1 COMPLETE with a documented-but-unfixed finding** (P-05 — save-time validation is correct, but a low-severity blur-hint gap tied to a shared react-hook-form/React-Compiler interaction across ~12 forms was judged disproportionate to fix here), **1 RESOLVED_BY_PRIOR_STEP** (P-01, fixed in Step 3), **1 BLOCKED_EXTERNAL** (P-02, needs the owner to check Supabase's SMTP configuration directly).
+- Two real code fixes came out of this step: P-03 (commit `79cac86`, Vercel `m3axdq9de`) and P-04 (commit `a43dec5`, Vercel `hc4yj4ap3`), both production-verified.
+- Every other item was verified live against `qrforge.space` (temporary accounts where auth was needed, cleaned up afterward) — see `docs/PARTIAL_REMEDIATION_QUEUE.md` for the full per-item evidence, including two genuine Supabase-admin-generated-token tests (P-30/P-31) that properly exercised the real password-recovery flow without needing a live inbox.
+- Status: **COMPLETE**
 
 ### FINAL STEP — Complete re-audit
 - Status: **NOT STARTED**

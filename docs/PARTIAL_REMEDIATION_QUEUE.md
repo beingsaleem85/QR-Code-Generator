@@ -147,13 +147,13 @@ Allowed status: `NOT STARTED`, `IN PROGRESS`, `COMPLETE`, `BLOCKED_EXTERNAL`, `R
 - Area: W. Analytics
 - Original audit line: "Device/browser/OS/country breakdown | PARTIAL | Existing user-agent.test.ts per inventory"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: a scan from a synthetic iPhone/Safari user-agent was correctly parsed and shown on the QR's analytics page — "Top device: Mobile", "OS: iOS 1 (100%)", "Browser: Safari 1 (100%)", plus a real country breakdown. No code change needed.
 
 ### P-23 — PDF.js range requests not inflating scan counts
 - Area: W. Analytics
 - Original audit line: "PDF.js range requests not inflating counts | PARTIAL | scan-tracking.test.ts exists per inventory"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production: a single anonymous visit to a PDF direct-open (`/v/[token]`) viewer — which internally makes multiple pdf.js range requests to fetch the file in chunks — recorded exactly 1 scan on the analytics page, not several. No code change needed.
 
 ### P-24 — Tablet viewport responsiveness
 - Area: Y. Responsive/mobile
@@ -165,7 +165,7 @@ Allowed status: `NOT STARTED`, `IN PROGRESS`, `COMPLETE`, `BLOCKED_EXTERNAL`, `R
 - Area: Y. Responsive/mobile
 - Original audit line: "PDF viewer / hosted pages at mobile viewport | PARTIAL | Content correctness verified at desktop viewport"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — live-verified on production at a 375×812 mobile viewport: the PDF direct-open viewer renders correctly (covered together with P-12), and a Multi-Link hosted `/p/[slug]` landing page also renders with no horizontal overflow and its real content visible. No code change needed.
 
 ### P-26 — Keyboard navigation
 - Area: Z. Accessibility/UX
@@ -197,13 +197,13 @@ Allowed status: `NOT STARTED`, `IN PROGRESS`, `COMPLETE`, `BLOCKED_EXTERNAL`, `R
 - Original audit line: "Reset-password page (post-email-link) | PARTIAL | No email inbox access to click a real reset link"
 - Severity: LOW
 - Dependency: same underlying constraint as P-02 (no real inbox access) for the "click a real emailed link" part specifically, but the page's *own* rendering/validation can still be tested by visiting it directly with a manufactured Supabase recovery session.
-- Status: NOT STARTED
+- Status: **COMPLETE** — resolved the "no real inbox" constraint legitimately: used Supabase's own admin `generateLink({type: "recovery", email})` to mint a real, Supabase-issued recovery token (the same kind a real email would contain), then drove the actual `/auth/callback` → `/reset-password` flow through the real UI. Live-verified on production: the reset form correctly accepts the new password and lands on `/dashboard`; the old password is rejected on a subsequent login attempt; the new password authenticates successfully. Full round trip, real token, no fabrication. No code change needed.
 
 ### P-31 — Recovery callback (`/auth/callback`)
 - Area: B. Authentication
 - Original audit line: "Recovery callback | PARTIAL | Code only | safeNext() guard confirmed in code; not clicked from a real email link"
 - Severity: LOW
-- Status: NOT STARTED
+- Status: **COMPLETE** — same real-token approach as P-30. Live-verified on production: a genuine recovery token correctly redirects through `/auth/callback` to `/reset-password` (the `safeNext()` guard works as intended); a fake/invalid token is safely rejected, redirecting to `/login?error=confirmation_failed` with no crash or raw error exposed. No code change needed.
 
 ### P-32 — Mobile auth UX (login/signup forms)
 - Area: B. Authentication
