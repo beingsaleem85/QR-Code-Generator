@@ -70,7 +70,13 @@
 }
 
 body {
-  background: var(--color-background);
+  /* A soft brand-tinted wash instead of a flat fill — the subtle radial
+     glow behind the top of the page is what reads as "premium SaaS"
+     rather than a plain gray canvas, without shifting any content color. */
+  background:
+    radial-gradient(ellipse 1200px 480px at 50% -10%, rgb(15 118 110 / 0.07), transparent 60%),
+    var(--color-background);
+  background-attachment: fixed;
   color: var(--color-foreground);
 }
 

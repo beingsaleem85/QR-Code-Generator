@@ -21,9 +21,9 @@ export function QRModeToggle({ mode, onModeChange }: QRModeToggleProps) {
           role="tab"
           aria-selected={mode === option}
           onClick={() => onModeChange(option)}
-          className={`rounded-full px-3.5 py-1.5 text-sm font-medium capitalize transition-all duration-150 ${
+          className={`rounded-full px-3.5 py-1.5 text-sm font-semibold capitalize transition-all duration-150 ${
             mode === option
-              ? "bg-primary text-primary-foreground shadow-sm"
+              ? "bg-gradient-to-b from-primary to-primary-hover text-primary-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >

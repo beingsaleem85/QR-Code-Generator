@@ -69,24 +69,28 @@ export function QRPreviewPanel({
   const current = rendered?.payload === payload ? rendered : null;
 
   return (
-    <Card className="flex flex-col items-center gap-4 p-6">
+    <Card className="rounded-2xl flex flex-col items-center gap-4 p-6">
       <div className="flex w-full items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground">Preview</h2>
-        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+        <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
           Live
         </span>
       </div>
-      <div className="flex aspect-square w-full max-w-[220px] items-center justify-center rounded-lg border border-border bg-background p-3 shadow-sm">
-        {current ? (
-          <div
-            role="img"
-            aria-label="QR code preview"
-            className="h-full w-full [&>svg]:h-full [&>svg]:w-full"
-            dangerouslySetInnerHTML={{ __html: current.svg }}
-          />
-        ) : (
-          <QrPlaceholderGraphic size={96} className={payload ? "opacity-100" : "opacity-30"} />
-        )}
+      <div className="relative flex aspect-square w-full max-w-[240px] items-center justify-center">
+        <div aria-hidden="true" className="absolute inset-4 rounded-full bg-primary/10 blur-2xl" />
+        <div className="relative flex h-full w-full items-center justify-center rounded-2xl border border-border bg-background p-4 shadow-lg">
+          {current ? (
+            <div
+              role="img"
+              aria-label="QR code preview"
+              className="h-full w-full [&>svg]:h-full [&>svg]:w-full"
+              dangerouslySetInnerHTML={{ __html: current.svg }}
+            />
+          ) : (
+            <QrPlaceholderGraphic size={96} className={payload ? "opacity-100" : "opacity-30"} />
+          )}
+        </div>
       </div>
 
       {!payload ? (

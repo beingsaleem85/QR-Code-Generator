@@ -216,7 +216,7 @@ export function QRGeneratorShell({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold text-foreground">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             {variant === "edit" ? "Edit QR Code" : "Create a QR Code"}
           </h1>
           {isDirty ? (
@@ -278,11 +278,11 @@ export function QRGeneratorShell({
         </div>
       </div>
 
-      <div className="rounded-xl border border-primary/20 bg-surface p-5 shadow-md">
+      <div className="rounded-2xl border border-primary/20 bg-gradient-to-b from-primary/[0.05] to-surface p-5 shadow-lg">
         <SectionEyebrow step={3} label="Save & download" />
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">QR ready</h2>
+            <h2 className="text-base font-bold text-foreground">QR ready</h2>
             <p className="mt-1 text-xs text-muted-foreground">
               {variant === "edit"
                 ? "Save your changes to update this QR code."

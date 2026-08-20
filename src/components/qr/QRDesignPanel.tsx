@@ -32,10 +32,10 @@ function DesignSection({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-background p-4">
+    <div className="rounded-xl border border-border border-l-[3px] border-l-primary bg-gradient-to-b from-primary/[0.04] to-transparent p-4">
       <div className="mb-3.5 flex items-center gap-2.5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <Icon size={16} aria-hidden="true" />
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-primary to-primary-hover text-primary-foreground shadow-sm">
+          <Icon size={17} aria-hidden="true" />
         </span>
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       </div>
@@ -46,10 +46,10 @@ function DesignSection({
 
 export function QRDesignPanel({ value, onChange }: QRDesignPanelProps) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 shadow-md">
+    <div className="rounded-2xl border border-border bg-surface p-5 shadow-md">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Design your QR</h2>
+          <h2 className="text-base font-bold text-foreground">Design your QR</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Customize the frame, pattern, colors, and logo — the preview updates instantly.
           </p>

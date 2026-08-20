@@ -54,12 +54,12 @@ export function QRTypeSelector({ mode, selectedType, onTypeChange }: QRTypeSelec
             disabled={comingSoon}
             title={comingSoon ? `${definition.label} — coming soon` : definition.label}
             onClick={comingSoon ? undefined : () => onTypeChange(definition.key)}
-            className={`group relative flex flex-col items-center gap-2 rounded-xl border px-2 py-3.5 text-center shadow-sm transition-all duration-150 ${
+            className={`group relative flex flex-col items-center gap-2 rounded-2xl border-2 px-2 py-4 text-center shadow-sm transition-all duration-150 ${
               comingSoon
                 ? "cursor-not-allowed border-border bg-surface text-muted-foreground opacity-60 shadow-none"
                 : selected
-                  ? "border-primary bg-primary text-primary-foreground shadow-md"
-                  : "border-border bg-surface text-foreground hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
+                  ? "border-primary bg-gradient-to-b from-primary to-primary-hover text-primary-foreground shadow-lg"
+                  : "border-transparent bg-surface text-foreground hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
             }`}
           >
             {comingSoon ? (
@@ -87,16 +87,16 @@ export function QRTypeSelector({ mode, selectedType, onTypeChange }: QRTypeSelec
             ) : null}
             {Icon ? (
               <span
-                className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors duration-150 ${
+                className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors duration-150 ${
                   selected
-                    ? "bg-primary-foreground/15 text-primary-foreground"
-                    : "bg-primary/8 text-primary group-hover:bg-primary/12"
+                    ? "bg-primary-foreground/20 text-primary-foreground"
+                    : "bg-primary/10 text-primary group-hover:bg-primary/15"
                 }`}
               >
-                <Icon size={18} aria-hidden="true" />
+                <Icon size={20} aria-hidden="true" />
               </span>
             ) : null}
-            <span className="text-xs leading-tight font-medium">{definition.label}</span>
+            <span className="text-xs leading-tight font-semibold">{definition.label}</span>
           </button>
         );
       })}
