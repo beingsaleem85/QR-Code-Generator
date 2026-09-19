@@ -64,26 +64,31 @@ describe("QRTypeSelector", () => {
     expect(screen.getByRole("option", { name: "2D Barcode" })).toBeInTheDocument();
   });
 
-  it("renders not-yet-implemented types disabled with a Coming soon badge, never clickable", async () => {
+  it("renders 2D Barcode as an active, enabled option that can be selected", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
     const onTypeChange = vi.fn();
     render(<QRTypeSelector mode="static" selectedType="url" onTypeChange={onTypeChange} />);
 
     const barcodeOption = screen.getByRole("option", { name: "2D Barcode" });
-    expect(barcodeOption).toBeDisabled();
-    expect(within(barcodeOption).getByText("Coming soon")).toBeInTheDocument();
-    expect(within(barcodeOption).queryByText("Dynamic")).not.toBeInTheDocument();
+    expect(barcodeOption).toBeEnabled();
+    expect(within(barcodeOption).queryByText("Coming soon")).not.toBeInTheDocument();
 
     await user.click(barcodeOption);
-    expect(onTypeChange).not.toHaveBeenCalled();
+    expect(onTypeChange).toHaveBeenCalledWith("barcode_2d");
   });
 
-  it("renders Location disabled with a Coming soon badge in dynamic mode too", () => {
-    render(<QRTypeSelector mode="dynamic" selectedType="url" onTypeChange={vi.fn()} />);
+  it("renders Location as an active, enabled option in dynamic mode", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    const onTypeChange = vi.fn();
+    render(<QRTypeSelector mode="dynamic" selectedType="url" onTypeChange={onTypeChange} />);
     const locationOption = screen.getByRole("option", { name: "Location" });
-    expect(locationOption).toBeDisabled();
-    expect(within(locationOption).getByText("Coming soon")).toBeInTheDocument();
+    expect(locationOption).toBeEnabled();
+    expect(within(locationOption).queryByText("Coming soon")).not.toBeInTheDocument();
+
+    await user.click(locationOption);
+    expect(onTypeChange).toHaveBeenCalledWith("location");
   });
 
   it("calls onTypeChange with the clicked type's key", async () => {

@@ -26,5 +26,10 @@ export async function GET(request: Request, context: { params: Promise<{ slug: s
     return new Response("Not found", { status: 404 });
   }
 
-  return streamPdfFromPath(resolution.payloadData.path, request.headers.get("range"));
+  const rawPublicTitle = resolution.payloadData.publicTitle;
+  const fileName =
+    typeof rawPublicTitle === "string" && rawPublicTitle.trim().length > 0
+      ? `${rawPublicTitle.trim().replace(/\.pdf$/i, "")}.pdf`
+      : "document.pdf";
+  return streamPdfFromPath(resolution.payloadData.path, request.headers.get("range"), fileName);
 }

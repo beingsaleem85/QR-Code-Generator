@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
   AUTH_REQUIRED,
+  TRIAL_EXPIRED,
   MAX_QR_NAME_LENGTH,
   type ActionResult,
   type SaveQrCodeInput,
@@ -12,11 +13,13 @@ import { buildQrPayload } from "@/lib/qr/render";
 import { generateRandomSlug } from "@/lib/qr/slug";
 import { generatePublicToken } from "@/lib/qr/public-token";
 import { getEntitlementForUser, resolveDynamicQrAllowance } from "@/lib/account/entitlements";
+import { hasValidAccountAccess, FREE_TRIAL_DURATION_MS } from "@/lib/account/trial";
 import { countDynamicQrCodes } from "@/lib/qr/queries";
 import { getQrTypeDefinition } from "@/lib/qr/registry";
 import { syncQrAssets, duplicateQrAssets } from "@/lib/qr/asset-sync";
 import type { QRCodeStatus } from "@/types/qr-record";
 import type { QRMode, QRType } from "@/types/qr";
+import type { Entitlement } from "@/lib/account/entitlements";
 
 function revalidateQrPaths(id?: string) {
   revalidatePath("/dashboard");
@@ -109,10 +112,8 @@ function shouldMintPublicToken(mode: QRMode, qrType: QRType, openDirectly: unkno
  * that will never matter to the decision.
  */
 async function checkDynamicQrAllowance(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
+  entitlement: Entitlement,
 ): Promise<{ error?: string }> {
-  const entitlement = await getEntitlementForUser(supabase, userId);
   if (entitlement.dynamicQrLimit === null) return {};
 
   const count = await countDynamicQrCodes();
@@ -133,8 +134,26 @@ export async function saveQrCode(input: SaveQrCodeInput): Promise<ActionResult<{
   const user = await requireUser(supabase);
   if (!user) return { error: AUTH_REQUIRED };
 
+  const isWithinTrial = user.created_at
+    ? Date.now() < new Date(user.created_at).getTime() + FREE_TRIAL_DURATION_MS
+    : true;
+
+  let entitlement: Entitlement | undefined;
+  if (!isWithinTrial || input.mode === "dynamic") {
+    entitlement = await getEntitlementForUser(supabase, user.id);
+  }
+
+  if (
+    !hasValidAccountAccess(
+      user.created_at,
+      entitlement ?? { plan: "free", isLifetime: false, expiresAt: null, dynamicQrLimit: null },
+    )
+  ) {
+    return { error: TRIAL_EXPIRED };
+  }
+
   if (input.mode === "dynamic") {
-    const allowance = await checkDynamicQrAllowance(supabase, user.id);
+    const allowance = await checkDynamicQrAllowance(entitlement!);
     if (allowance.error) return { error: allowance.error };
   }
 
@@ -190,6 +209,7 @@ export async function updateQrCode(
     .from("qr_codes")
     .select("slug, mode")
     .eq("id", id)
+    .eq("user_id", user.id)
     .maybeSingle();
   if (!existing) {
     return { error: "Couldn't find that QR code — it may have been deleted." };
@@ -200,7 +220,8 @@ export async function updateQrCode(
   // slot, and blocking edits to it just because the account happens to be
   // at its limit would be a hostile, pointless restriction.
   if (input.mode === "dynamic" && existing.mode !== "dynamic") {
-    const allowance = await checkDynamicQrAllowance(supabase, user.id);
+    const entitlement = await getEntitlementForUser(supabase, user.id);
+    const allowance = await checkDynamicQrAllowance(entitlement);
     if (allowance.error) return { error: allowance.error };
   }
 
@@ -222,6 +243,7 @@ export async function updateQrCode(
         slug,
       })
       .eq("id", id)
+      .eq("user_id", user.id)
       .select("id")
       .single();
 
@@ -256,16 +278,35 @@ export async function duplicateQrCode(id: string): Promise<ActionResult<{ id: st
     .from("qr_codes")
     .select("name, mode, qr_type, payload_data, design_config, destination_url")
     .eq("id", id)
+    .eq("user_id", user.id)
     .maybeSingle();
 
   if (fetchError || !source) {
     return { error: "Couldn't find that QR code to duplicate." };
   }
 
+  const isWithinTrial = user.created_at
+    ? Date.now() < new Date(user.created_at).getTime() + FREE_TRIAL_DURATION_MS
+    : true;
+
+  let entitlement: Entitlement | undefined;
+  if (!isWithinTrial || source.mode === "dynamic") {
+    entitlement = await getEntitlementForUser(supabase, user.id);
+  }
+
+  if (
+    !hasValidAccountAccess(
+      user.created_at,
+      entitlement ?? { plan: "free", isLifetime: false, expiresAt: null, dynamicQrLimit: null },
+    )
+  ) {
+    return { error: TRIAL_EXPIRED };
+  }
+
   // Duplicating a dynamic QR creates a brand-new dynamic row — consumes a
   // slot exactly like saveQrCode does.
   if (source.mode === "dynamic") {
-    const allowance = await checkDynamicQrAllowance(supabase, user.id);
+    const allowance = await checkDynamicQrAllowance(entitlement!);
     if (allowance.error) return { error: allowance.error };
   }
 
@@ -335,6 +376,7 @@ export async function setQrCodeStatus(
     .from("qr_codes")
     .update({ status })
     .eq("id", id)
+    .eq("user_id", user.id)
     .select("status")
     .single();
 
@@ -357,6 +399,7 @@ export async function deleteQrCode(id: string): Promise<ActionResult<{ id: strin
     .from("qr_codes")
     .select("id")
     .eq("id", id)
+    .eq("user_id", user.id)
     .maybeSingle();
   if (!existing) {
     return { error: "That QR code no longer exists, or you don't have access to it." };
@@ -377,7 +420,8 @@ export async function deleteQrCode(id: string): Promise<ActionResult<{ id: strin
   const { data: assets } = await supabase
     .from("qr_assets")
     .select("id, bucket, path")
-    .eq("qr_code_id", id);
+    .eq("qr_code_id", id)
+    .eq("user_id", user.id);
 
   for (const asset of (assets as { id: string; bucket: string; path: string }[] | null) ?? []) {
     const { error: removeError } = await supabase.storage.from(asset.bucket).remove([asset.path]);
@@ -389,6 +433,7 @@ export async function deleteQrCode(id: string): Promise<ActionResult<{ id: strin
     const { error: assetDeleteError } = await supabase
       .from("qr_assets")
       .delete()
+      .eq("user_id", user.id)
       .in(
         "id",
         (assets as { id: string }[]).map((asset) => asset.id),
@@ -398,7 +443,11 @@ export async function deleteQrCode(id: string): Promise<ActionResult<{ id: strin
     }
   }
 
-  const { error, count } = await supabase.from("qr_codes").delete({ count: "exact" }).eq("id", id);
+  const { error, count } = await supabase
+    .from("qr_codes")
+    .delete({ count: "exact" })
+    .eq("id", id)
+    .eq("user_id", user.id);
 
   if (error) {
     return { error: "Couldn't delete — it may already be gone, or you may not have access." };

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Alert } from "@/components/ui/Alert";
 import { QRGeneratorShell } from "@/components/qr/QRGeneratorShell";
 import { takeDraft, type QrDraft } from "@/lib/qr/draft-storage";
+import { getMyTrialInfo } from "@/lib/account/actions";
 
 /**
  * Checks for a draft staged by `QRGeneratorShell` when an unauthenticated
@@ -14,6 +16,7 @@ import { takeDraft, type QrDraft } from "@/lib/qr/draft-storage";
  */
 export default function NewQrCodePage() {
   const [draft, setDraft] = useState<QrDraft | null | undefined>(undefined);
+  const [isTrialExpired, setIsTrialExpired] = useState(false);
 
   useEffect(() => {
     // sessionStorage only exists client-side, so this one-time read can't
@@ -23,6 +26,11 @@ export default function NewQrCodePage() {
     // to (there's no external-system subscription to model instead).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraft(takeDraft());
+    getMyTrialInfo().then((trial) => {
+      if (trial?.isTrialExpired) {
+        setIsTrialExpired(true);
+      }
+    });
   }, []);
 
   if (draft === undefined) return null;
@@ -30,15 +38,21 @@ export default function NewQrCodePage() {
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-6">
       {draft ? (
+        <Alert variant="info">
+          Your draft has been restored. Review your settings and click Save QR to save it to your account.
+        </Alert>
+      ) : null}
+      {draft ? (
         <QRGeneratorShell
           initialName={draft.name}
           initialMode={draft.mode}
           initialQrType={draft.qrType}
           initialContent={draft.content}
           initialDesign={draft.design}
+          isTrialExpired={isTrialExpired}
         />
       ) : (
-        <QRGeneratorShell />
+        <QRGeneratorShell isTrialExpired={isTrialExpired} />
       )}
     </div>
   );

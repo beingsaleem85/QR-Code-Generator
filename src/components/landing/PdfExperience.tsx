@@ -25,9 +25,19 @@ interface PdfExperienceProps {
  * being duplicated per route.
  */
 export async function PdfExperience({ slug, payloadData, proxyUrl }: PdfExperienceProps) {
-  const payload = payloadData as { path?: unknown; fileName?: unknown; openDirectly?: unknown };
+  const payload = payloadData as {
+    path?: unknown;
+    fileName?: unknown;
+    publicTitle?: unknown;
+    openDirectly?: unknown;
+  };
   const directOpen =
     payload.openDirectly === true && typeof payload.path === "string" && payload.path.length > 0;
+
+  const publicDisplayName =
+    typeof payload.publicTitle === "string" && payload.publicTitle.trim().length > 0
+      ? `${payload.publicTitle.trim().replace(/\.pdf$/i, "")}.pdf`
+      : "document.pdf";
 
   if (directOpen) {
     // Non-blocking scan recording, same pattern as `/r/[slug]` — read
@@ -46,9 +56,9 @@ export async function PdfExperience({ slug, payloadData, proxyUrl }: PdfExperien
     return (
       <PdfViewer
         proxyUrl={proxyUrl}
-        fileName={typeof payload.fileName === "string" ? payload.fileName : "document.pdf"}
+        fileName={publicDisplayName}
       />
     );
   }
-  return <PdfLandingPage payloadData={payloadData} />;
+  return <PdfLandingPage payloadData={payloadData} proxyUrl={proxyUrl} />;
 }

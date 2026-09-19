@@ -241,7 +241,7 @@ describe("listQrCodesPage", () => {
       items: [expect.objectContaining({ id: "qr-1" })],
       totalCount: 1,
       page: 1,
-      pageSize: 20,
+      pageSize: 10,
       pageCount: 1,
     });
   });
@@ -302,6 +302,8 @@ describe("listQrCodesPage", () => {
     await listQrCodesPage({ sortBy: "name", sortDirection: "asc" });
 
     expect(chain.order).toHaveBeenCalledWith("name", { ascending: true });
+    // Stable deterministic tie-breaker on id
+    expect(chain.order).toHaveBeenCalledWith("id", { ascending: true });
   });
 
   it("paginates via range, computed from page and pageSize", async () => {
@@ -314,13 +316,27 @@ describe("listQrCodesPage", () => {
     expect(result.pageCount).toBe(5);
   });
 
-  it("clamps pageSize to a sane maximum", async () => {
-    const chain = createChain({ data: [], error: null, count: 0 });
-    const { listQrCodesPage } = await loadQueries(chain);
+  it("supports allowed page sizes (10, 25, 50, 100) and defaults to 10 for invalid sizes", async () => {
+    const chain1 = createChain({ data: [], error: null, count: 0 });
+    const { listQrCodesPage: list1 } = await loadQueries(chain1);
+    await list1({ pageSize: 25 });
+    expect(chain1.range).toHaveBeenCalledWith(0, 24);
 
-    await listQrCodesPage({ pageSize: 10_000 });
+    const chain2 = createChain({ data: [], error: null, count: 0 });
+    const { listQrCodesPage: list2 } = await loadQueries(chain2);
+    await list2({ pageSize: 50 });
+    expect(chain2.range).toHaveBeenCalledWith(0, 49);
 
-    expect(chain.range).toHaveBeenCalledWith(0, 99);
+    const chain3 = createChain({ data: [], error: null, count: 0 });
+    const { listQrCodesPage: list3 } = await loadQueries(chain3);
+    await list3({ pageSize: 100 });
+    expect(chain3.range).toHaveBeenCalledWith(0, 99);
+
+    // Unsupported page size falls back to default 10
+    const chain4 = createChain({ data: [], error: null, count: 0 });
+    const { listQrCodesPage: list4 } = await loadQueries(chain4);
+    await list4({ pageSize: 10_000 });
+    expect(chain4.range).toHaveBeenCalledWith(0, 9);
   });
 
   it("throws on a real database error", async () => {

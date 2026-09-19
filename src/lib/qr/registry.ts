@@ -18,7 +18,8 @@ import {
   multiLinkQrSchema,
   menuQrSchema,
   feedbackQrSchema,
-  notYetImplementedQrSchema,
+  locationQrSchema,
+  barcode2dQrSchema,
 } from "@/lib/validation/qr";
 import {
   buildUrlPayload,
@@ -39,6 +40,8 @@ import {
   buildMultiLinkPayload,
   buildMenuPayload,
   buildFeedbackPayload,
+  buildLocationPayload,
+  buildBarcode2dPayload,
 } from "@/lib/qr/payload-builders";
 
 /**
@@ -241,7 +244,8 @@ export const qrTypeRegistry: Record<QRType, QRTypeDefinition> = {
     icon: "scan-line",
     staticSupport: true,
     dynamicSupport: false,
-    fields: notYetImplementedQrSchema,
+    fields: barcode2dQrSchema,
+    payloadBuilder: toGenericBuilder(buildBarcode2dPayload),
     needsStorage: false,
     needsLandingPage: false,
     supportsAnalytics: false,
@@ -305,7 +309,8 @@ export const qrTypeRegistry: Record<QRType, QRTypeDefinition> = {
     icon: "map-pin",
     staticSupport: true,
     dynamicSupport: true,
-    fields: notYetImplementedQrSchema,
+    fields: locationQrSchema,
+    payloadBuilder: toGenericBuilder(buildLocationPayload),
     needsStorage: false,
     needsLandingPage: false,
     supportsAnalytics: true,

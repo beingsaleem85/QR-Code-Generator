@@ -19,6 +19,12 @@ interface QRDownloadActionsProps {
   slug?: string | null;
   /** The saved record's opaque public-viewer token (edit mode only) — see QRPreviewPanel. */
   publicToken?: string | null;
+  isAuthenticated?: boolean;
+  isTrialExpired?: boolean;
+  onGuestAction?: () => void;
+  onTrialExpired?: () => void;
+  onGenerate?: () => void;
+  showGenerate?: boolean;
 }
 
 const PNG_SIZE_OPTIONS = [512, 1024, 2048] as const;
@@ -50,6 +56,12 @@ export function QRDownloadActions({
   name,
   slug,
   publicToken,
+  isAuthenticated = true,
+  isTrialExpired = false,
+  onGuestAction,
+  onTrialExpired,
+  onGenerate,
+  showGenerate = false,
 }: QRDownloadActionsProps) {
   const [downloading, setDownloading] = useState<"png" | "svg" | null>(null);
   const [pngSize, setPngSize] = useState<PngSize>(1024);
@@ -58,11 +70,31 @@ export function QRDownloadActions({
   const disabled = !payload || downloading !== null;
   const pendingFirstSave = mode === "dynamic" && !slug;
 
+  const handleGenerate = () => {
+    if (isAuthenticated === false) {
+      onGuestAction?.();
+      return;
+    }
+    if (isTrialExpired) {
+      onTrialExpired?.();
+      return;
+    }
+    onGenerate?.();
+  };
+
   const handleDownloadPng = async () => {
+    if (isAuthenticated === false) {
+      onGuestAction?.();
+      return;
+    }
+    if (isTrialExpired) {
+      onTrialExpired?.();
+      return;
+    }
     if (!payload) return;
     setDownloading("png");
     try {
-      const { dataUrl } = await renderStyledQrPngDataUrl(payload, design, pngSize);
+      const { dataUrl } = await renderStyledQrPngDataUrl(payload, design, pngSize, qrType);
       triggerDownload(dataUrl, `${filename}-qr.png`);
     } finally {
       setDownloading(null);
@@ -70,10 +102,18 @@ export function QRDownloadActions({
   };
 
   const handleDownloadSvg = async () => {
+    if (isAuthenticated === false) {
+      onGuestAction?.();
+      return;
+    }
+    if (isTrialExpired) {
+      onTrialExpired?.();
+      return;
+    }
     if (!payload) return;
     setDownloading("svg");
     try {
-      const { svg } = await renderStyledQrSvg(payload, design);
+      const { svg } = await renderStyledQrSvg(payload, design, qrType);
       const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
       triggerDownload(url, `${filename}-qr.svg`);
       URL.revokeObjectURL(url);
@@ -84,6 +124,16 @@ export function QRDownloadActions({
 
   return (
     <div className="flex flex-col gap-3">
+      {showGenerate ? (
+        <Button
+          variant="secondary"
+          disabled={disabled}
+          onClick={handleGenerate}
+        >
+          Generate QR
+        </Button>
+      ) : null}
+
       <FormField label="PNG size" htmlFor="png-size">
         <Select
           id="png-size"

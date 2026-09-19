@@ -7,6 +7,8 @@ import type { LucideIcon } from "lucide-react";
 import { DASHBOARD_NAV_ITEMS } from "@/components/dashboard/nav-items";
 import { LogoutButton } from "@/components/dashboard/LogoutButton";
 import { Logo } from "@/components/layout/Logo";
+import { TrialStatusWidget } from "@/components/dashboard/TrialStatusWidget";
+import type { TrialInfo } from "@/lib/account/trial";
 
 /** Presentation-only lookup, keyed by href (the nav items' existing unique
  * key) — kept separate from the shared nav-items data so this purely visual
@@ -31,7 +33,11 @@ function findActiveHref(pathname: string): string | undefined {
     .find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.href;
 }
 
-export function DashboardSidebar() {
+interface DashboardSidebarProps {
+  trialInfo?: TrialInfo;
+}
+
+export function DashboardSidebar({ trialInfo }: DashboardSidebarProps = {}) {
   const pathname = usePathname();
   const activeHref = findActiveHref(pathname);
 
@@ -63,7 +69,12 @@ export function DashboardSidebar() {
           </Link>
         );
       })}
-      <div className="mt-2 border-t border-border pt-2">
+      {trialInfo ? (
+        <div className="mt-auto pt-3">
+          <TrialStatusWidget trialInfo={trialInfo} />
+        </div>
+      ) : null}
+      <div className={`${trialInfo ? "mt-2" : "mt-auto"} border-t border-border pt-2`}>
         <LogoutButton />
       </div>
     </nav>

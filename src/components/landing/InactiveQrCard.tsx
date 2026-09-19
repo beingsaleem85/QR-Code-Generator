@@ -7,9 +7,9 @@ export function InactiveQrCard() {
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
       <Card className="max-w-sm p-6 text-center">
-        <p className="text-sm font-medium text-foreground">This QR code isn&apos;t active</p>
+        <p className="text-sm font-medium text-foreground">This QR code is currently inactive.</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          The owner has paused or archived it. Check back later or contact them directly.
+          The QR code owner needs to reactivate their QRForge account.
         </p>
       </Card>
     </main>

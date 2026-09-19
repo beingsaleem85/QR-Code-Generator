@@ -34,6 +34,7 @@ export async function getMyProfile(): Promise<UserProfile> {
     email: user.email ?? "",
     displayName: row?.display_name ?? null,
     avatarUrl: row?.avatar_url ?? null,
+    createdAt: user.created_at,
   };
 }
 

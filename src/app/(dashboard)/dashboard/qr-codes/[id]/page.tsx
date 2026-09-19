@@ -7,11 +7,13 @@ import { QRDownloadActions } from "@/components/qr/QRDownloadActions";
 import { buttonVariants } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { QrPlaceholderGraphic } from "@/components/ui/QrPlaceholderGraphic";
+import { Lock } from "lucide-react";
 import { getQrTypeDefinition } from "@/lib/qr/registry";
 import { resolveEncodedPayload } from "@/lib/qr/render";
 import { deriveDestinationSummary } from "@/lib/qr/records";
 import { getQrCodeById, listQrFeedback } from "@/lib/qr/queries";
 import { renderStyledQrSvg } from "@/lib/qr/styled-svg";
+import { getMyTrialInfo } from "@/lib/account/actions";
 
 export default async function QrCodeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,6 +22,9 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
   if (!qrCode) {
     notFound();
   }
+
+  const trial = await getMyTrialInfo();
+  const isTrialExpired = trial?.isTrialExpired ?? false;
 
   const typeDefinition = getQrTypeDefinition(qrCode.qrType);
   const destinationSummary = deriveDestinationSummary(qrCode.qrType, qrCode.payloadData);
@@ -36,7 +41,7 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
     qrCode.slug,
     qrCode.publicToken,
   );
-  const preview = payload ? await renderStyledQrSvg(payload, qrCode.designConfig) : null;
+  const preview = (!isTrialExpired && payload) ? await renderStyledQrSvg(payload, qrCode.designConfig) : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -55,7 +60,22 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
       <div className="grid grid-cols-1 gap-6 px-4 pb-6 sm:px-6 lg:grid-cols-[280px_1fr]">
         <Card className="flex flex-col items-center gap-4 p-6">
           <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-border bg-background p-3">
-            {preview ? (
+            {isTrialExpired ? (
+              <div className="flex h-full w-full flex-col items-center justify-center p-3 text-center">
+                <div className="relative mb-2 flex items-center justify-center">
+                  <QrPlaceholderGraphic size={72} className="opacity-15" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-surface-raised text-foreground shadow-sm">
+                      <Lock className="h-4 w-4" aria-hidden="true" />
+                    </span>
+                  </div>
+                </div>
+                <span className="text-xs font-semibold text-foreground">Free Trial Expired</span>
+                <p className="mt-1 text-[11px] leading-tight text-muted-foreground">
+                  Upgrade to Pro to view and download your QR code.
+                </p>
+              </div>
+            ) : preview ? (
               <div
                 role="img"
                 aria-label="QR code preview"
@@ -74,6 +94,7 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
             name={qrCode.name}
             slug={qrCode.slug}
             publicToken={qrCode.publicToken}
+            isTrialExpired={isTrialExpired}
           />
         </Card>
 
@@ -188,6 +209,8 @@ export default async function QrCodeDetailPage({ params }: { params: Promise<{ i
             <QRCodeRowActions
               qrCode={qrCode}
               showDownload={false}
+              showDuplicate={true}
+              showArchive={true}
               redirectAfterDeleteTo="/dashboard/qr-codes"
             />
           </Card>

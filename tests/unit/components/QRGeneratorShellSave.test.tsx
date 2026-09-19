@@ -1,9 +1,19 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QRGeneratorShell } from "@/components/qr/QRGeneratorShell";
+import { TRIAL_EXPIRED } from "@/lib/qr/action-types";
+
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = vi.fn(function mock(this: HTMLDialogElement) {
+    this.open = true;
+  });
+  HTMLDialogElement.prototype.close = vi.fn(function mock(this: HTMLDialogElement) {
+    this.open = false;
+  });
+});
 
 const pushMock = vi.fn();
 const refreshMock = vi.fn();
@@ -90,6 +100,31 @@ describe("QRGeneratorShell save flow (create)", () => {
     expect(saveQrCodeMock).toHaveBeenCalledTimes(1);
 
     resolveSave({ data: { id: "x" } });
+  });
+
+  it("opens UpgradeModal directly when isTrialExpired=true without calling saveQrCode", async () => {
+    const user = userEvent.setup();
+    render(<QRGeneratorShell isTrialExpired={true} />);
+
+    await user.click(screen.getByRole("button", { name: "Save QR" }));
+
+    expect(saveQrCodeMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: /your free trial has ended/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens UpgradeModal when server returns TRIAL_EXPIRED", async () => {
+    saveQrCodeMock.mockResolvedValue({ error: TRIAL_EXPIRED });
+    const user = userEvent.setup();
+    render(<QRGeneratorShell />);
+
+    await user.click(screen.getByRole("button", { name: "Save QR" }));
+
+    expect(saveQrCodeMock).toHaveBeenCalledTimes(1);
+    expect(
+      await screen.findByRole("heading", { name: /your free trial has ended/i }),
+    ).toBeInTheDocument();
   });
 });
 

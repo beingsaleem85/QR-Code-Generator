@@ -25,9 +25,16 @@ test.describe("Journey A — Anonymous Static QR", () => {
     // confirms real client-side generation happened, not just an empty form.
     await expect(page.locator("svg, canvas").first()).toBeVisible();
 
-    const downloadPromise = page.waitForEvent("download");
+    // In v8.2, guest users must not download without authentication.
+    // Clicking Download PNG preserves draft and redirects to /login.
     await page.getByRole("button", { name: "Download PNG" }).click();
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/-qr\.png$/);
+
+    await page.waitForURL(/\/login\?redirectTo=/);
+    expect(page.url()).toContain("redirectTo=%2Fdashboard%2Fqr-codes%2Fnew");
+
+    const draft = await page.evaluate(() => sessionStorage.getItem("qr-generator-draft"));
+    expect(draft).toBeTruthy();
+    const parsed = JSON.parse(draft as string);
+    expect(parsed.content.url).toBe("https://example.com/anonymous-journey");
   });
 });

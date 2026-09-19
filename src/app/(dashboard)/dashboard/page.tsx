@@ -4,6 +4,7 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { QRCodeCard } from "@/components/dashboard/QRCodeCard";
 import { buttonVariants } from "@/components/ui/Button";
 import { getMyQrCodeStats, listQrCodesPage } from "@/lib/qr/queries";
+import { getMyTrialInfo } from "@/lib/account/actions";
 
 const RECENT_COUNT = 3;
 
@@ -14,9 +15,10 @@ const RECENT_COUNT = 3;
  * numbers or the newest handful of rows.
  */
 export default async function DashboardOverviewPage() {
-  const [stats, recentPage] = await Promise.all([
+  const [stats, recentPage, trialInfo] = await Promise.all([
     getMyQrCodeStats(),
     listQrCodesPage({ pageSize: RECENT_COUNT, sortBy: "updated_at", sortDirection: "desc" }),
+    getMyTrialInfo(),
   ]);
   const recent = recentPage.items;
 
@@ -30,6 +32,25 @@ export default async function DashboardOverviewPage() {
           </Link>
         }
       />
+
+      {trialInfo?.isTrialExpired ? (
+        <div
+          role="alert"
+          className="mx-4 -mt-2 flex flex-col gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 sm:mx-6 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">
+              Your 14-day Free Trial has expired
+            </h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Upgrade to Pro to create new QR codes and reactivate your dynamic QR codes.
+            </p>
+          </div>
+          <Link href="/pricing" className={buttonVariants({ variant: "primary", size: "sm" })}>
+            Upgrade to Pro
+          </Link>
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-6 px-4 pb-6 sm:px-6">
         <AnalyticsSummaryCards

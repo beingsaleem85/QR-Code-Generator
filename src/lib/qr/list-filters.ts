@@ -1,5 +1,10 @@
 import { qrTypeRegistry } from "@/lib/qr/registry";
-import { isQrSortField, type ListQrCodesPageFilters } from "@/lib/qr/queries";
+import {
+  isQrSortField,
+  ALLOWED_PAGE_SIZES,
+  type AllowedPageSize,
+  type ListQrCodesPageFilters,
+} from "@/lib/qr/list-constants";
 import type { QRMode, QRType } from "@/types/qr";
 import type { QRCodeStatus } from "@/types/qr-record";
 
@@ -13,6 +18,8 @@ export interface QrListSearchParams {
   sort?: string;
   dir?: string;
   page?: string;
+  pageSize?: string;
+  limit?: string;
 }
 
 const VALID_TYPES = new Set<string>(Object.keys(qrTypeRegistry));
@@ -40,6 +47,14 @@ export function parseQrListSearchParams(params: QrListSearchParams): ListQrCodes
 
   const page = Number(params.page);
   if (Number.isInteger(page) && page > 0) filters.page = page;
+
+  const rawPageSize = Number(params.pageSize ?? params.limit);
+  if (
+    Number.isInteger(rawPageSize) &&
+    (ALLOWED_PAGE_SIZES as readonly number[]).includes(rawPageSize)
+  ) {
+    filters.pageSize = rawPageSize as AllowedPageSize;
+  }
 
   return filters;
 }

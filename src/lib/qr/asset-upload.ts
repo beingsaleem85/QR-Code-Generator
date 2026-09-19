@@ -35,6 +35,11 @@ export const ASSET_BUCKETS = {
     maxSizeBytes: 10 * 1024 * 1024,
     allowedMimeTypes: ["image/png", "image/jpeg", "image/webp", "image/gif"],
   },
+  logo: {
+    bucket: "qr-logos",
+    maxSizeBytes: 2 * 1024 * 1024,
+    allowedMimeTypes: ["image/png", "image/jpeg", "image/svg+xml", "image/webp"],
+  },
 } as const;
 
 export type AssetKind = keyof typeof ASSET_BUCKETS;

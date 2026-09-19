@@ -86,7 +86,7 @@ describe("/p/[slug] — PDF resolution and delegation", () => {
     const result = await LandingPage(makeParams("abc12345"));
     render(result);
 
-    expect(screen.getByText(/QR code isn.t active/i)).toBeInTheDocument();
+    expect(screen.getByText(/This QR code is currently inactive/i)).toBeInTheDocument();
     expect(screen.queryByText(/PdfExperience:/)).not.toBeInTheDocument();
   });
 

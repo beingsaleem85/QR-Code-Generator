@@ -161,4 +161,88 @@ describe("QRDownloadActions", () => {
 
     createElementSpy.mockRestore();
   });
+
+  it("intercepts Download PNG and Download SVG when unauthenticated (guest lock)", async () => {
+    const onGuestAction = vi.fn();
+    const createElementSpy = vi.spyOn(document, "createElement");
+    const pngSpy = vi.spyOn(await import("@/lib/qr/styled-svg"), "renderStyledQrPngDataUrl");
+    const svgSpy = vi.spyOn(await import("@/lib/qr/styled-svg"), "renderStyledQrSvg");
+    pngSpy.mockClear();
+    svgSpy.mockClear();
+
+    const user = userEvent.setup();
+    render(
+      <QRDownloadActions
+        qrType="url"
+        mode="static"
+        content={{ url: "example.com" }}
+        design={DEFAULT_DESIGN_CONFIG}
+        name="Guest QR"
+        isAuthenticated={false}
+        onGuestAction={onGuestAction}
+        showGenerate={true}
+      />,
+    );
+
+    // Clicking Generate QR invokes onGuestAction
+    await user.click(screen.getByRole("button", { name: "Generate QR" }));
+    expect(onGuestAction).toHaveBeenCalledTimes(1);
+
+    // Clicking Download PNG invokes onGuestAction and does not call PNG renderer
+    await user.click(screen.getByRole("button", { name: "Download PNG" }));
+    expect(onGuestAction).toHaveBeenCalledTimes(2);
+    expect(pngSpy).not.toHaveBeenCalled();
+
+    // Clicking Download SVG invokes onGuestAction and does not call SVG renderer
+    await user.click(screen.getByRole("button", { name: "Download SVG" }));
+    expect(onGuestAction).toHaveBeenCalledTimes(3);
+    expect(svgSpy).not.toHaveBeenCalled();
+
+    // Ensure no download anchor was clicked
+    const anchor = createElementSpy.mock.results
+      .map((result) => result.value)
+      .find((value): value is HTMLAnchorElement => value instanceof HTMLAnchorElement);
+    expect(anchor).toBeUndefined();
+
+    createElementSpy.mockRestore();
+    pngSpy.mockRestore();
+    svgSpy.mockRestore();
+  });
+
+  it("blocks download and opens trial expired handler when free trial is expired", async () => {
+    const onTrialExpired = vi.fn();
+    const pngSpy = vi.spyOn(await import("@/lib/qr/styled-svg"), "renderStyledQrPngDataUrl");
+    const svgSpy = vi.spyOn(await import("@/lib/qr/styled-svg"), "renderStyledQrSvg");
+    pngSpy.mockClear();
+    svgSpy.mockClear();
+    const user = userEvent.setup();
+
+    render(
+      <QRDownloadActions
+        qrType="url"
+        mode="static"
+        content={{ url: "example.com" }}
+        design={DEFAULT_DESIGN_CONFIG}
+        name="Expired QR"
+        isAuthenticated={true}
+        isTrialExpired={true}
+        onTrialExpired={onTrialExpired}
+        showGenerate={true}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Generate QR" }));
+    expect(onTrialExpired).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "Download PNG" }));
+    expect(onTrialExpired).toHaveBeenCalledTimes(2);
+    expect(pngSpy).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Download SVG" }));
+    expect(onTrialExpired).toHaveBeenCalledTimes(3);
+    expect(svgSpy).not.toHaveBeenCalled();
+
+    pngSpy.mockRestore();
+    svgSpy.mockRestore();
+  });
 });

@@ -24,6 +24,10 @@ export const pdfQrSchema = z.object({
    * the record had been saved with it unchecked.
    */
   openDirectly: z.boolean().optional().default(false),
+  /** Optional public-facing document title to display to visitors instead of raw local disk filename. */
+  publicTitle: z.string().max(100).optional(),
+  /** Transient client-side blob URL for native PDF preview before/after upload. */
+  blobUrl: z.string().optional(),
 });
 
 export type PdfQrInput = z.infer<typeof pdfQrSchema>;

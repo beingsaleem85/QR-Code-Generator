@@ -78,14 +78,37 @@ describe("QRCodesFilterBar", () => {
     expect(screen.getByLabelText("Filter by folder")).toBeInTheDocument();
   });
 
-  it("clearing the search box removes the q param", async () => {
+  it("clearing the search box removes the q param immediately", async () => {
     currentParams = new URLSearchParams("q=menu");
     render(<QRCodesFilterBar folders={[]} />);
 
     fireEvent.change(screen.getByLabelText("Search QR codes by name"), { target: { value: "" } });
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/dashboard/qr-codes?"), {
-      timeout: 1000,
+    // Should push immediately without waiting for debounce
+    expect(pushMock).toHaveBeenCalledWith("/dashboard/qr-codes?");
+  });
+
+  it("syncs internal search input when q param changes externally", () => {
+    currentParams = new URLSearchParams("q=initial");
+    const { rerender } = render(<QRCodesFilterBar folders={[]} />);
+    expect(screen.getByLabelText("Search QR codes by name")).toHaveValue("initial");
+
+    currentParams = new URLSearchParams("");
+    rerender(<QRCodesFilterBar folders={[]} />);
+    expect(screen.getByLabelText("Search QR codes by name")).toHaveValue("");
+  });
+
+  it("preserves pageSize param when search query is changed", async () => {
+    currentParams = new URLSearchParams("pageSize=25");
+    render(<QRCodesFilterBar folders={[]} />);
+
+    fireEvent.change(screen.getByLabelText("Search QR codes by name"), {
+      target: { value: "cafe" },
     });
+
+    await waitFor(
+      () => expect(pushMock).toHaveBeenCalledWith("/dashboard/qr-codes?pageSize=25&q=cafe"),
+      { timeout: 1000 },
+    );
   });
 });

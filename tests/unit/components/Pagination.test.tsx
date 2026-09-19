@@ -5,8 +5,10 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { Pagination } from "@/components/dashboard/Pagination";
 
 let currentParams = new URLSearchParams();
+const pushMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock }),
   usePathname: () => "/dashboard/qr-codes",
   useSearchParams: () => currentParams,
 }));
@@ -14,6 +16,7 @@ vi.mock("next/navigation", () => ({
 afterEach(() => cleanup());
 beforeEach(() => {
   currentParams = new URLSearchParams();
+  pushMock.mockReset();
 });
 
 describe("Pagination", () => {
@@ -56,5 +59,30 @@ describe("Pagination", () => {
       "href",
       "/dashboard/qr-codes?type=pdf&sort=name&page=3",
     );
+  });
+
+  it("displays the correct range for middle page (e.g. 11-20 of 23)", () => {
+    render(<Pagination page={2} pageCount={3} totalCount={23} pageSize={10} />);
+    expect(screen.getByText(/11–20 of 23 total/)).toBeInTheDocument();
+  });
+
+  it("displays exactly 10, 25, 50, 100 as selectable page sizes", () => {
+    render(<Pagination page={1} pageCount={3} totalCount={23} pageSize={10} />);
+    const select = screen.getByRole("combobox", { name: "Page size" });
+    expect(select).toBeInTheDocument();
+    const options = Array.from(select.querySelectorAll("option")).map((o) => o.value);
+    expect(options).toEqual(["10", "25", "50", "100"]);
+  });
+
+  it("updates pageSize in URL and resets page to 1 on page size change", async () => {
+    currentParams = new URLSearchParams("page=2&q=test");
+    const { userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    render(<Pagination page={2} pageCount={3} totalCount={23} pageSize={10} />);
+
+    const select = screen.getByRole("combobox", { name: "Page size" });
+    await user.selectOptions(select, "25");
+
+    expect(pushMock).toHaveBeenCalledWith("/dashboard/qr-codes?q=test&pageSize=25");
   });
 });

@@ -61,7 +61,7 @@ describe("PdfExperience — viewer vs landing page decision", () => {
 
     const result = await PdfExperience({
       slug: "abc12345",
-      payloadData: { path: "u/a/menu.pdf", fileName: "menu.pdf", openDirectly: true },
+      payloadData: { path: "u/a/menu.pdf", fileName: "menu.pdf", publicTitle: "menu.pdf", openDirectly: true },
       proxyUrl: "/api/pdf-view/aBcDeFgHiJkLmNoP",
     });
     render(result);

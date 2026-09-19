@@ -59,7 +59,7 @@ describe("/v/[token] — opaque public viewer entry point", () => {
     const result = await PublicViewerPage(makeParams("aBcDeFgHiJkLmNoP"));
     render(result);
 
-    expect(screen.getByText(/QR code isn.t active/i)).toBeInTheDocument();
+    expect(screen.getByText(/This QR code is currently inactive/i)).toBeInTheDocument();
     expect(screen.queryByText(/PdfExperience:/)).not.toBeInTheDocument();
   });
 

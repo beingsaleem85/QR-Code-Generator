@@ -11,7 +11,22 @@ const NAV_LINKS = [
   { label: "Pricing", href: "/pricing" },
 ];
 
-export function Header() {
+import { createClient } from "@/lib/supabase/server";
+
+export async function Header() {
+  let user = null;
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    // Non-blocking fallback for edge renders
+    user = null;
+  }
+
+  const authLabel = user ? "Dashboard" : "Log in";
+  const authHref = user ? "/dashboard" : "/login";
+
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-surface/90 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-surface/80">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
@@ -30,8 +45,8 @@ export function Header() {
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Link href="/login" className="text-sm font-medium text-foreground hover:text-primary">
-            Log in
+          <Link href={authHref} className="text-sm font-medium text-foreground hover:text-primary">
+            {authLabel}
           </Link>
           <Link href="/qr-generator" className={buttonVariants({ variant: "primary", size: "sm" })}>
             Create QR Code
@@ -39,7 +54,7 @@ export function Header() {
         </div>
 
         <MobileNavDrawer
-          links={[...NAV_LINKS, { label: "Log in", href: "/login" }]}
+          links={[...NAV_LINKS, { label: authLabel, href: authHref }]}
           cta={{ label: "Create QR Code", href: "/qr-generator" }}
         />
       </div>

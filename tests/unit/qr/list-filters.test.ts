@@ -51,6 +51,16 @@ describe("parseQrListSearchParams", () => {
     expect(parseQrListSearchParams({ page: "abc" })).toEqual({});
   });
 
+  it("keeps allowed page sizes (10, 25, 50, 100) from pageSize or limit, drops invalid", () => {
+    expect(parseQrListSearchParams({ pageSize: "10" })).toEqual({ pageSize: 10 });
+    expect(parseQrListSearchParams({ pageSize: "25" })).toEqual({ pageSize: 25 });
+    expect(parseQrListSearchParams({ pageSize: "50" })).toEqual({ pageSize: 50 });
+    expect(parseQrListSearchParams({ pageSize: "100" })).toEqual({ pageSize: 100 });
+    expect(parseQrListSearchParams({ limit: "50" })).toEqual({ pageSize: 50 });
+    expect(parseQrListSearchParams({ pageSize: "15" })).toEqual({});
+    expect(parseQrListSearchParams({ pageSize: "abc" })).toEqual({});
+  });
+
   it("combines every dimension at once", () => {
     expect(
       parseQrListSearchParams({
@@ -62,6 +72,7 @@ describe("parseQrListSearchParams", () => {
         sort: "updated_at",
         dir: "desc",
         page: "2",
+        pageSize: "25",
       }),
     ).toEqual({
       search: "menu",
@@ -72,6 +83,7 @@ describe("parseQrListSearchParams", () => {
       sortBy: "updated_at",
       sortDirection: "desc",
       page: 2,
+      pageSize: 25,
     });
   });
 });

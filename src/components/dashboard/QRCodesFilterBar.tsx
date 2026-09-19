@@ -36,6 +36,14 @@ export function QRCodesFilterBar({ folders }: QRCodesFilterBarProps) {
   const searchParams = useSearchParams();
   const [searchInput, setSearchInput] = useState(searchParams.get("q") ?? "");
 
+  // Sync internal search input if URL search param `q` changes externally (e.g. Clear filters)
+  const externalQuery = searchParams.get("q") ?? "";
+  const [prevExternalQuery, setPrevExternalQuery] = useState(externalQuery);
+  if (externalQuery !== prevExternalQuery) {
+    setPrevExternalQuery(externalQuery);
+    setSearchInput(externalQuery);
+  }
+
   const pushParams = (patch: Record<string, string | null>, resetPage = true) => {
     const next = new URLSearchParams(searchParams.toString());
     for (const [key, value] of Object.entries(patch)) {
@@ -49,6 +57,13 @@ export function QRCodesFilterBar({ folders }: QRCodesFilterBarProps) {
   useEffect(() => {
     const current = searchParams.get("q") ?? "";
     if (searchInput === current) return;
+
+    // Immediately clear query if search box is emptied
+    if (!searchInput.trim()) {
+      pushParams({ q: null });
+      return;
+    }
+
     const timeout = setTimeout(() => pushParams({ q: searchInput || null }), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on searchInput changes; re-running on searchParams/pushParams would fight the debounce.

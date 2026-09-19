@@ -18,10 +18,27 @@ describe("renderStyledQrSvg", () => {
     expect(svg).toContain("<circle");
   });
 
+  it("uses fine circle shapes for the fine-dots pattern style", async () => {
+    const design = { ...DEFAULT_DESIGN_CONFIG, pattern: { dotStyle: "fine-dots" } };
+    const { svg } = await renderStyledQrSvg(PAYLOAD, design);
+    expect(svg).toContain("<circle");
+    // Fine dots have a radius of (CELL / 2) * 0.58 = 2.9
+    expect(svg).toContain('r="2.9"');
+  });
+
   it("uses rounded rects for the rounded pattern style", async () => {
     const design = { ...DEFAULT_DESIGN_CONFIG, pattern: { dotStyle: "rounded" } };
     const { svg } = await renderStyledQrSvg(PAYLOAD, design);
     expect(svg).toMatch(/<rect[^>]*rx="[1-9]/);
+  });
+
+  it("supports diamond corner dot eye style", async () => {
+    const design = {
+      ...DEFAULT_DESIGN_CONFIG,
+      eyes: { ...DEFAULT_DESIGN_CONFIG.eyes, cornerDotStyle: "diamond" },
+    };
+    const { svg } = await renderStyledQrSvg(PAYLOAD, design);
+    expect(svg).toContain("<polygon");
   });
 
   it("applies distinct eye colors separately from the data-module color", async () => {
@@ -124,6 +141,43 @@ describe("renderStyledQrSvg", () => {
   it("renders no frame chrome when frame.style is null", async () => {
     const { svg } = await renderStyledQrSvg(PAYLOAD, DEFAULT_DESIGN_CONFIG);
     expect(svg).not.toContain("<text");
+  });
+
+  it("uses fine circle shapes for the micro-dots pattern style", async () => {
+    const design = { ...DEFAULT_DESIGN_CONFIG, pattern: { dotStyle: "micro-dots" } };
+    const { svg } = await renderStyledQrSvg(PAYLOAD, design);
+    expect(svg).toContain("<circle");
+    // Micro dots have a radius of (CELL / 2) * 0.42 = 2.1
+    expect(svg).toContain('r="2.1"');
+  });
+
+  it("renders boxed frame style with bordered frame and bottom CTA", async () => {
+    const design = {
+      ...DEFAULT_DESIGN_CONFIG,
+      frame: { style: "boxed", ctaText: "SCAN ME", ctaFont: null, color: "#000000" },
+    };
+    const { svg } = await renderStyledQrSvg(PAYLOAD, design);
+    expect(svg).toContain("SCAN ME");
+    expect(svg).toContain('rx="6"');
+  });
+
+  it("renders split frame style with top header and bottom CTA banner", async () => {
+    const design = {
+      ...DEFAULT_DESIGN_CONFIG,
+      frame: { style: "split", ctaText: "SCAN ME", ctaFont: null, color: "#000000" },
+    };
+    const { svg } = await renderStyledQrSvg(PAYLOAD, design);
+    expect(svg).toContain("SCAN ME");
+  });
+
+  it("renders poster frame style with card background and pill CTA", async () => {
+    const design = {
+      ...DEFAULT_DESIGN_CONFIG,
+      frame: { style: "poster", ctaText: "SCAN ME", ctaFont: null, color: "#000000" },
+    };
+    const { svg } = await renderStyledQrSvg(PAYLOAD, design);
+    expect(svg).toContain("SCAN ME");
+    expect(svg).toContain('opacity="0.12"');
   });
 
   it("falls back to the plain renderer if the styled path throws", async () => {

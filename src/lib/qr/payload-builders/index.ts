@@ -16,3 +16,5 @@ export * from "./social";
 export * from "./multi-link";
 export * from "./menu";
 export * from "./feedback";
+export * from "./location";
+export * from "./barcode-2d";

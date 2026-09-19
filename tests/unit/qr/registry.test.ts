@@ -20,6 +20,8 @@ const IMPLEMENTED_TYPES = [
   "multi_link",
   "menu",
   "feedback",
+  "barcode_2d",
+  "location",
 ] as const;
 
 describe("QR type registry", () => {

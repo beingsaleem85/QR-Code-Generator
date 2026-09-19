@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { submitQrFeedback } from "@/lib/qr/feedback-actions";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -143,9 +144,9 @@ export function FeedbackLandingPage({ slug, payloadData }: FeedbackLandingPagePr
             className="mt-0.5"
           />
           I agree that this feedback may be stored and reviewed by the business. See{" "}
-          <a href="/privacy" className="underline">
+          <Link href="/privacy" className="underline">
             Privacy Policy
-          </a>
+          </Link>
           .
         </label>
 

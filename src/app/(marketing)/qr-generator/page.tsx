@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { QRGeneratorShell } from "@/components/qr/QRGeneratorShell";
+import { createClient } from "@/lib/supabase/server";
+import { getMyTrialInfo } from "@/lib/account/actions";
 
 export const metadata: Metadata = {
   title: "QR Code Generator",
@@ -8,10 +10,19 @@ export const metadata: Metadata = {
   alternates: { canonical: "/qr-generator" },
 };
 
-export default function QrGeneratorPage() {
+export default async function QrGeneratorPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const trial = user ? await getMyTrialInfo() : null;
+
   return (
     <div className="p-6">
-      <QRGeneratorShell />
+      <QRGeneratorShell
+        isAuthenticated={Boolean(user)}
+        isTrialExpired={trial?.isTrialExpired ?? false}
+      />
     </div>
   );
 }

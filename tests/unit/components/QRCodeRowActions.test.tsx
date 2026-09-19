@@ -65,12 +65,36 @@ const qrCode: QrCodeRecord = {
 };
 
 describe("QRCodeRowActions", () => {
+  const openMenu = async (user: ReturnType<typeof userEvent.setup>, name = qrCode.name) => {
+    await user.click(screen.getByRole("button", { name: `Actions for ${name}` }));
+  };
+
+  it("renders a 3-dots actions trigger button and opens the menu with actions", async () => {
+    const user = userEvent.setup();
+    render(<QRCodeRowActions qrCode={qrCode} />);
+
+    // Trigger button is present
+    expect(
+      screen.getByRole("button", { name: "Actions for My Restaurant Menu" }),
+    ).toBeInTheDocument();
+    // Menu items are not in the document until opened
+    expect(screen.queryByRole("menuitem", { name: "Download" })).not.toBeInTheDocument();
+
+    await openMenu(user);
+
+    expect(screen.getByRole("menuitem", { name: "Download" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Duplicate" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Archive" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
+  });
+
   it("duplicates and navigates to the new QR's detail page on success", async () => {
     duplicateQrCodeMock.mockResolvedValue({ data: { id: "qr-2" } });
     const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={qrCode} />);
 
-    await user.click(screen.getByRole("button", { name: "Duplicate" }));
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Duplicate" }));
 
     expect(duplicateQrCodeMock).toHaveBeenCalledWith("qr-1");
     expect(pushMock).toHaveBeenCalledWith("/dashboard/qr-codes/qr-2");
@@ -81,7 +105,8 @@ describe("QRCodeRowActions", () => {
     const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={qrCode} />);
 
-    await user.click(screen.getByRole("button", { name: "Duplicate" }));
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Duplicate" }));
 
     expect(await screen.findByText("Couldn't find that QR code to duplicate.")).toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
@@ -92,14 +117,16 @@ describe("QRCodeRowActions", () => {
     const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={qrCode} />);
 
-    await user.click(screen.getByRole("button", { name: "Archive" }));
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
 
     expect(setQrCodeStatusMock).toHaveBeenCalledWith("qr-1", "archived");
     expect(refreshMock).toHaveBeenCalled();
 
     cleanup();
     render(<QRCodeRowActions qrCode={{ ...qrCode, status: "archived" }} />);
-    expect(screen.getByRole("button", { name: "Unarchive" })).toBeInTheDocument();
+    await openMenu(user);
+    expect(screen.getByRole("menuitem", { name: "Unarchive" })).toBeInTheDocument();
   });
 
   it("requires confirmation before deleting, then deletes and refreshes", async () => {
@@ -107,15 +134,14 @@ describe("QRCodeRowActions", () => {
     const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={qrCode} />);
 
-    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(deleteQrCodeMock).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     expect(deleteQrCodeMock).toHaveBeenCalledWith("qr-1");
     expect(refreshMock).toHaveBeenCalled();
-    // List/card usage (no redirectAfterDeleteTo) never navigates — the
-    // row just disappears from the list it's still on.
     expect(pushMock).not.toHaveBeenCalled();
   });
 
@@ -124,7 +150,8 @@ describe("QRCodeRowActions", () => {
     const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={qrCode} redirectAfterDeleteTo="/dashboard/qr-codes" />);
 
-    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     expect(deleteQrCodeMock).toHaveBeenCalledWith("qr-1");
@@ -137,7 +164,8 @@ describe("QRCodeRowActions", () => {
     const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={qrCode} redirectAfterDeleteTo="/dashboard/qr-codes" />);
 
-    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     await screen.findByText("Couldn't delete — it may already be gone.");
@@ -150,7 +178,8 @@ describe("QRCodeRowActions", () => {
     const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={qrCode} />);
 
-    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     expect(
@@ -164,21 +193,25 @@ describe("QRCodeRowActions", () => {
     const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={qrCode} />);
 
-    await user.click(screen.getByRole("button", { name: "Download" }));
-    expect(await screen.findByRole("button", { name: "Download" })).toBeEnabled();
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Download" }));
 
     expect(clickSpy).toHaveBeenCalledOnce();
     clickSpy.mockRestore();
   });
 
-  it("hides the Download button when showDownload is false (QR detail page)", () => {
+  it("hides the Download button when showDownload is false (QR detail page)", async () => {
+    const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={qrCode} showDownload={false} />);
-    expect(screen.queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
+    await openMenu(user);
+    expect(screen.queryByRole("menuitem", { name: "Download" })).not.toBeInTheDocument();
   });
 
-  it("has no Pause control for a static QR", () => {
+  it("has no Pause control for a static QR", async () => {
+    const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={qrCode} />);
-    expect(screen.queryByRole("button", { name: /pause/i })).not.toBeInTheDocument();
+    await openMenu(user);
+    expect(screen.queryByRole("menuitem", { name: /pause/i })).not.toBeInTheDocument();
   });
 
   const dynamicQrCode: QrCodeRecord = {
@@ -193,28 +226,33 @@ describe("QRCodeRowActions", () => {
     const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={dynamicQrCode} />);
 
-    await user.click(screen.getByRole("button", { name: "Pause My Restaurant Menu" }));
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Pause My Restaurant Menu" }));
 
     expect(setQrCodeStatusMock).toHaveBeenCalledWith("qr-1", "paused");
     expect(refreshMock).toHaveBeenCalled();
 
     cleanup();
     render(<QRCodeRowActions qrCode={{ ...dynamicQrCode, status: "paused" }} />);
+    await openMenu(user);
     expect(
-      screen.getByRole("button", { name: "Reactivate My Restaurant Menu" }),
+      screen.getByRole("menuitem", { name: "Reactivate My Restaurant Menu" }),
     ).toBeInTheDocument();
   });
 
-  it("hides Pause once a dynamic QR is archived", () => {
+  it("hides Pause once a dynamic QR is archived", async () => {
+    const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={{ ...dynamicQrCode, status: "archived" }} />);
-    expect(screen.queryByRole("button", { name: /pause|reactivate/i })).not.toBeInTheDocument();
+    await openMenu(user);
+    expect(screen.queryByRole("menuitem", { name: /pause|reactivate/i })).not.toBeInTheDocument();
   });
 
   it("the delete confirmation discloses scan history only for a plain type", async () => {
     const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={qrCode} />);
 
-    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
 
     const dialog = screen.getByRole("dialog", { name: "Confirm delete My Restaurant Menu" });
     expect(dialog.textContent).toContain(
@@ -227,7 +265,8 @@ describe("QRCodeRowActions", () => {
     const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={{ ...qrCode, qrType: "pdf" }} />);
 
-    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
 
     const dialog = screen.getByRole("dialog", { name: "Confirm delete My Restaurant Menu" });
     expect(dialog.textContent).toContain(
@@ -239,7 +278,8 @@ describe("QRCodeRowActions", () => {
     const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={{ ...qrCode, qrType: "feedback" }} />);
 
-    await user.click(screen.getByRole("button", { name: "Delete My Restaurant Menu" }));
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
 
     const dialog = screen.getByRole("dialog", { name: "Confirm delete My Restaurant Menu" });
     expect(dialog.textContent).toContain(
@@ -253,8 +293,8 @@ describe("QRCodeRowActions", () => {
     const user = userEvent.setup();
     render(<QRCodeRowActions qrCode={dynamicQrCode} />);
 
-    await user.click(screen.getByRole("button", { name: "Download" }));
-    expect(await screen.findByRole("button", { name: "Download" })).toBeEnabled();
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Download" }));
 
     expect(clickSpy).toHaveBeenCalledOnce();
     clickSpy.mockRestore();

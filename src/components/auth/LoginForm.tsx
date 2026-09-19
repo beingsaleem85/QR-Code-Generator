@@ -13,11 +13,14 @@ import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
+import { safeNext } from "@/lib/auth/safe-redirect";
 
-/** Only follow a same-app dashboard redirect — never an arbitrary URL from the query string. */
+/** Only follow a safe same-app redirect — never an arbitrary external or malformed URL. */
 function safeRedirectTarget(): string {
+  if (typeof window === "undefined") return "/dashboard";
   const requested = new URLSearchParams(window.location.search).get("redirectTo");
-  return requested && requested.startsWith("/dashboard") ? requested : "/dashboard";
+  return safeNext(requested);
 }
 
 /**
@@ -43,10 +46,19 @@ function forgetSessionOnBrowserClose() {
   });
 }
 
+function getInitialFormError(): string | null {
+  if (typeof window === "undefined") return null;
+  const urlError = new URLSearchParams(window.location.search).get("error");
+  if (urlError === "access_denied") return "Sign in with Google was cancelled.";
+  if (urlError === "oauth_failed") return "Unable to sign in with Google. Please try again.";
+  if (urlError === "confirmation_failed") return "The confirmation link is invalid or has expired.";
+  return null;
+}
+
 export function LoginForm() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(getInitialFormError);
   const [rememberMe, setRememberMe] = useState(true);
 
   const {
@@ -79,8 +91,25 @@ export function LoginForm() {
   });
 
   return (
-    <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
       {formError ? <Alert variant="error">{formError}</Alert> : null}
+
+      <GoogleAuthButton
+        disabled={submitting}
+        onError={(msg) => setFormError(msg)}
+        redirectTo={safeRedirectTarget()}
+      />
+
+      <div className="relative my-1 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-border" />
+        </div>
+        <span className="relative bg-surface px-3 text-xs uppercase tracking-wider text-muted-foreground">
+          or continue with email
+        </span>
+      </div>
+
+      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
 
       <FormField label="Email" htmlFor="email" error={errors.email?.message}>
         <Input
@@ -120,5 +149,6 @@ export function LoginForm() {
         {submitting ? "Signing in..." : "Log in"}
       </Button>
     </form>
+    </div>
   );
 }

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CreditCard, KeyRound, UserRound } from "lucide-react";
 import { AccountProfileForm } from "@/components/account/AccountProfileForm";
 import { ChangePasswordForm } from "@/components/account/ChangePasswordForm";
@@ -7,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { getMyEntitlement, planLabel } from "@/lib/account/entitlements";
 import { getMyProfile, resolveDisplayLabel } from "@/lib/account/profile";
 import { countDynamicQrCodes } from "@/lib/qr/queries";
+import { calculateTrialStatus } from "@/lib/account/trial";
 
 export default async function AccountPage() {
   // The plan itself is a security-relevant fact, not display data, so it
@@ -16,6 +18,7 @@ export default async function AccountPage() {
   const profile = await getMyProfile();
   const entitlement = await getMyEntitlement();
   const dynamicQrCount = await countDynamicQrCodes();
+  const trialInfo = calculateTrialStatus(profile.createdAt, entitlement);
   const displayLabel = resolveDisplayLabel(profile);
 
   return (
@@ -56,16 +59,33 @@ export default async function AccountPage() {
               className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                 entitlement.plan === "pro"
                   ? "bg-primary/10 text-primary"
-                  : "bg-background text-muted-foreground"
+                  : trialInfo?.isTrialExpired
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-background text-muted-foreground"
               }`}
             >
-              {planLabel(entitlement)}
+              {trialInfo ? trialInfo.displayText : planLabel(entitlement)}
             </span>
           </div>
           {entitlement.plan === "pro" && !entitlement.isLifetime && entitlement.expiresAt ? (
             <p className="text-xs text-muted-foreground">
               Renews {new Date(entitlement.expiresAt).toLocaleDateString()}
             </p>
+          ) : null}
+          {trialInfo?.isFreeTrial && trialInfo.trialExpiresAt ? (
+            <p className="text-xs text-muted-foreground">
+              {trialInfo.isTrialExpired
+                ? `Trial expired on ${trialInfo.trialExpiresAt.toLocaleDateString()}`
+                : `Trial expires on ${trialInfo.trialExpiresAt.toLocaleDateString()}`}
+            </p>
+          ) : null}
+          {trialInfo?.isTrialExpired ? (
+            <Link
+              href="/pricing"
+              className="mt-1 block rounded-lg bg-primary py-1.5 text-center text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              Upgrade to Pro
+            </Link>
           ) : null}
           <div className="flex items-center justify-between border-t border-border pt-3">
             <p className="text-xs text-muted-foreground">Dynamic QR codes</p>

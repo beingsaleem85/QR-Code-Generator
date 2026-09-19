@@ -13,6 +13,15 @@ import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
+import { safeNext } from "@/lib/auth/safe-redirect";
+
+/** Only follow a safe same-app redirect — never an arbitrary external or malformed URL. */
+function safeRedirectTarget(): string {
+  if (typeof window === "undefined") return "/dashboard";
+  const requested = new URLSearchParams(window.location.search).get("redirectTo");
+  return safeNext(requested);
+}
 
 export function SignupForm() {
   const router = useRouter();
@@ -30,11 +39,14 @@ export function SignupForm() {
     setSubmitting(true);
     setFormError(null);
 
+    const target = safeRedirectTarget();
     const supabase = createClient();
     const { data, error } = await supabase.auth.signUp({
       email: values.email,
       password: values.password,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard` },
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${target === "/dashboard" ? "/dashboard" : encodeURIComponent(target)}`,
+      },
     });
 
     if (error) {
@@ -50,7 +62,7 @@ export function SignupForm() {
     // link first (handled by /auth/callback), so just tell them to check.
     if (data.session && data.user) {
       await ensureProfile(supabase, data.user);
-      router.push("/dashboard");
+      router.push(target);
       router.refresh();
       return;
     }
@@ -59,10 +71,26 @@ export function SignupForm() {
   });
 
   return (
-    <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
       {formError ? <Alert variant="error">{formError}</Alert> : null}
 
-      <FormField label="Email" htmlFor="email" error={errors.email?.message}>
+      <GoogleAuthButton
+        disabled={submitting || submitted}
+        onError={(msg) => setFormError(msg)}
+        redirectTo={safeRedirectTarget()}
+      />
+
+      <div className="relative my-1 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-border" />
+        </div>
+        <span className="relative bg-surface px-3 text-xs uppercase tracking-wider text-muted-foreground">
+          or continue with email
+        </span>
+      </div>
+
+      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+        <FormField label="Email" htmlFor="email" error={errors.email?.message}>
         <Input
           id="email"
           type="email"
@@ -116,5 +144,6 @@ export function SignupForm() {
         </Alert>
       ) : null}
     </form>
+    </div>
   );
 }

@@ -27,6 +27,7 @@ export interface SaveQrCodeInput {
 export type ActionResult<T> = { data: T; error?: undefined } | { data?: undefined; error: string };
 
 export const AUTH_REQUIRED = "AUTH_REQUIRED";
+export const TRIAL_EXPIRED = "TRIAL_EXPIRED";
 
 /**
  * Module 3.12 (Security Hardening): the one free-text field in this app

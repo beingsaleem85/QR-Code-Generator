@@ -13,10 +13,8 @@ describe("QRContentPanel", () => {
   });
 
   it("never leaks internal file paths or development terminology for a not-yet-implemented type", () => {
-    // QRTypeSelector now prevents a real user from ever selecting
-    // barcode_2d/location, so this only exercises the defense-in-depth
-    // fallback directly.
-    render(<QRContentPanel qrType="barcode_2d" value={{}} onChange={vi.fn()} />);
+    // Tests defense-in-depth fallback directly for unconfigured/future types.
+    render(<QRContentPanel qrType={"future_type" as unknown as import("@/types/qr").QRType} value={{}} onChange={vi.fn()} />);
 
     const bodyText = document.body.textContent ?? "";
     expect(bodyText).not.toMatch(/\.md|architecture|module \d|docs\//i);

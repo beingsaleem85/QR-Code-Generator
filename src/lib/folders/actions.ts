@@ -59,7 +59,8 @@ export async function deleteFolder(id: string): Promise<ActionResult<{ id: strin
   const { error, count } = await supabase
     .from("qr_folders")
     .delete({ count: "exact" })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id);
 
   if (error) {
     return { error: "Couldn't delete the folder — please try again." };
@@ -84,10 +85,11 @@ export async function assignQrCodeFolder(
     .from("qr_codes")
     .update({ folder_id: folderId })
     .eq("id", qrCodeId)
+    .eq("user_id", user.id)
     .select("id")
     .single();
 
-  if (error) {
+  if (error || !data) {
     return {
       error: "Couldn't move that QR code — it may have been deleted, or you may not have access.",
     };

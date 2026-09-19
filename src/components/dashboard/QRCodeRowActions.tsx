@@ -1,7 +1,17 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  MoreVertical,
+  Download,
+  Copy,
+  Pause,
+  Play,
+  Archive,
+  ArchiveRestore,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { duplicateQrCode, deleteQrCode, setQrCodeStatus } from "@/lib/qr/actions";
 import { resolveEncodedPayload, slugifyForFilename } from "@/lib/qr/render";
@@ -15,6 +25,10 @@ interface QRCodeRowActionsProps {
    * with a resolution picker) — set false there to avoid a redundant
    * second download button. Defaults to true for list/card usage. */
   showDownload?: boolean;
+  /** Visible in kebab actions menu. Defaults to true. */
+  showDuplicate?: boolean;
+  /** Visible in kebab actions menu. Defaults to true. */
+  showArchive?: boolean;
   /** Set on the QR's own detail page, where a successful delete leaves
    * nothing at the current URL to refresh into — without this, deleting
    * from `/dashboard/qr-codes/[id]` just re-fetched that same now-gone
@@ -53,24 +67,42 @@ function deleteScopeMessage(qrCode: QrCodeRecord): string {
 }
 
 /**
- * Quick per-row actions for the dashboard QR list (Module 3.5): Download,
- * Duplicate, Archive/Unarchive, Delete (with confirmation); Pause/Resume for
- * dynamic codes (Module 3.6). Regenerates the download from the saved
- * `payload_data`/`design_config` (mode-aware — a dynamic QR always
- * regenerates its `/r/[slug]` link, never the raw destination) — never a
- * stored image — the same rule the generator itself follows. `router
- * .refresh()` after a mutation re-fetches the Server Component list rather
- * than hand-patching local state, keeping this the single source of truth.
+ * Compact 3-dots kebab menu for dashboard list/table/card actions:
+ * Download, Pause/Resume, Duplicate, Archive/Unarchive, Delete (with confirmation).
  */
 export function QRCodeRowActions({
   qrCode,
   showDownload = true,
+  showDuplicate = true,
+  showArchive = true,
   redirectAfterDeleteTo,
 }: QRCodeRowActionsProps) {
   const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [menuOpen]);
 
   const handleDownload = async () => {
     setBusy("download");
@@ -152,40 +184,128 @@ export function QRCodeRowActions({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      {showDownload ? (
-        <Button variant="ghost" size="sm" onClick={handleDownload} disabled={busy !== null}>
-          {busy === "download" ? "Preparing..." : "Download"}
-        </Button>
-      ) : null}
-      <Button variant="ghost" size="sm" onClick={handleDuplicate} disabled={busy !== null}>
-        {busy === "duplicate" ? "Duplicating..." : "Duplicate"}
-      </Button>
-      {qrCode.mode === "dynamic" && qrCode.status !== "archived" ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handlePauseToggle}
-          disabled={busy !== null}
-          aria-label={`${qrCode.status === "paused" ? "Reactivate" : "Pause"} ${qrCode.name}`}
-        >
-          {busy === "pause" ? "Working..." : qrCode.status === "paused" ? "Reactivate" : "Pause"}
-        </Button>
-      ) : null}
-      <Button variant="ghost" size="sm" onClick={handleArchiveToggle} disabled={busy !== null}>
-        {busy === "archive" ? "Working..." : qrCode.status === "archived" ? "Unarchive" : "Archive"}
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={openDeleteDialog}
-        disabled={busy !== null}
-        aria-label={`Delete ${qrCode.name}`}
+    <div ref={menuRef} className="relative inline-block text-left">
+      <button
+        type="button"
+        aria-label={`Actions for ${qrCode.name}`}
+        aria-haspopup="true"
+        aria-expanded={menuOpen}
+        onClick={() => setMenuOpen((open) => !open)}
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
       >
-        Delete
-      </Button>
+        <MoreVertical className="h-4 w-4" />
+      </button>
 
-      {error ? <p className="w-full text-xs text-destructive">{error}</p> : null}
+      {menuOpen ? (
+        <div
+          role="menu"
+          aria-orientation="vertical"
+          className="absolute right-0 top-full z-40 mt-1 w-44 rounded-xl border border-border bg-surface p-1 shadow-lg backdrop-blur-sm animate-in fade-in zoom-in-95 duration-100"
+        >
+          {showDownload ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                handleDownload();
+              }}
+              disabled={busy !== null}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-background disabled:opacity-50"
+            >
+              <Download className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>{busy === "download" ? "Preparing..." : "Download"}</span>
+            </button>
+          ) : null}
+
+          {qrCode.mode === "dynamic" && qrCode.status !== "archived" ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                handlePauseToggle();
+              }}
+              disabled={busy !== null}
+              aria-label={`${qrCode.status === "paused" ? "Reactivate" : "Pause"} ${qrCode.name}`}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-background disabled:opacity-50"
+            >
+              {qrCode.status === "paused" ? (
+                <Play className="h-3.5 w-3.5 text-muted-foreground" />
+              ) : (
+                <Pause className="h-3.5 w-3.5 text-muted-foreground" />
+              )}
+              <span>
+                {busy === "pause"
+                  ? "Working..."
+                  : qrCode.status === "paused"
+                    ? "Reactivate"
+                    : "Pause"}
+              </span>
+            </button>
+          ) : null}
+
+          {showDuplicate ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                handleDuplicate();
+              }}
+              disabled={busy !== null}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-background disabled:opacity-50"
+            >
+              <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>{busy === "duplicate" ? "Duplicating..." : "Duplicate"}</span>
+            </button>
+          ) : null}
+
+          {showArchive ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                handleArchiveToggle();
+              }}
+              disabled={busy !== null}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-background disabled:opacity-50"
+            >
+              {qrCode.status === "archived" ? (
+                <ArchiveRestore className="h-3.5 w-3.5 text-muted-foreground" />
+              ) : (
+                <Archive className="h-3.5 w-3.5 text-muted-foreground" />
+              )}
+              <span>
+                {busy === "archive"
+                  ? "Working..."
+                  : qrCode.status === "archived"
+                    ? "Unarchive"
+                    : "Archive"}
+              </span>
+            </button>
+          ) : null}
+
+          <div className="my-1 border-t border-border" />
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              openDeleteDialog();
+            }}
+            disabled={busy !== null}
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            <span>Delete</span>
+          </button>
+        </div>
+      ) : null}
+
+      {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
 
       <dialog
         ref={dialogRef}

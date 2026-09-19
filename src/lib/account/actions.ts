@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { profileSchema } from "@/lib/validation/account/profile";
 import { AUTH_REQUIRED, type ActionResult } from "@/lib/qr/action-types";
+import { getEntitlementForUser } from "@/lib/account/entitlements";
+import { calculateTrialStatus, type TrialInfo } from "@/lib/account/trial";
 
 /**
  * Persists the signed-in user's display name to their `profiles` row.
@@ -38,4 +40,18 @@ export async function updateDisplayName(
 
   revalidatePath("/dashboard/account");
   return { data: { displayName: parsed.data.displayName } };
+}
+
+/**
+ * Returns trial and entitlement status for the current signed-in user.
+ */
+export async function getMyTrialInfo(): Promise<TrialInfo | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const entitlement = await getEntitlementForUser(supabase, user.id);
+  return calculateTrialStatus(user.created_at, entitlement);
 }

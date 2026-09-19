@@ -10,6 +10,14 @@ export function buildRedirectUrl(slug: string): string {
 }
 
 /**
+ * Root-level vanity short URL format (e.g. `https://qrforge.space/abdias`).
+ */
+export function buildRootShortUrl(slug: string): string {
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  return `${base}/${slug}`;
+}
+
+/**
  * The landing-page counterpart to `buildRedirectUrl` (Module 3.8) — used
  * instead of `/r/[slug]` for dynamic QR types that need a hosted
  * experience rather than a plain redirect (`needsLandingPage: true` in the

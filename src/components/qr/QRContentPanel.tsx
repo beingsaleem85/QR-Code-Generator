@@ -22,7 +22,7 @@ export function QRContentPanel({ qrType, value, onChange }: QRContentPanelProps)
     // or development terminology, in case it's ever reached some other way.
     return (
       <Placeholder
-        label={`${definition.label} — coming soon`}
+        label={`${definition?.label ?? "Feature"} — coming soon`}
         description="This QR type isn't available to create yet."
       />
     );

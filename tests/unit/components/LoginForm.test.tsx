@@ -15,8 +15,14 @@ vi.mock("next/navigation", () => ({
 // transition without depending on real wall-clock timing (established
 // Module 2.5 lesson: don't wait on setTimeout-backed async work).
 const signInWithPasswordMock = vi.fn(() => new Promise(() => {}));
+const signInWithOAuthMock = vi.fn(() => new Promise(() => {}));
 vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({ auth: { signInWithPassword: signInWithPasswordMock } }),
+  createClient: () => ({
+    auth: {
+      signInWithPassword: signInWithPasswordMock,
+      signInWithOAuth: signInWithOAuthMock,
+    },
+  }),
 }));
 
 afterEach(() => cleanup());
@@ -94,5 +100,31 @@ describe("LoginForm", () => {
 
     expect(await screen.findByText("Invalid login credentials")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Log in" })).toBeEnabled();
+  });
+
+  it("renders the Continue with Google button and email divider", () => {
+    render(<LoginForm />);
+    expect(screen.getByRole("button", { name: /continue with google/i })).toBeInTheDocument();
+    expect(screen.getByText(/or continue with email/i)).toBeInTheDocument();
+  });
+
+  it("displays a user-friendly alert when redirected with an oauth error param", () => {
+    window.history.pushState({}, "", "/login?error=access_denied");
+    try {
+      render(<LoginForm />);
+      expect(screen.getByText("Sign in with Google was cancelled.")).toBeInTheDocument();
+    } finally {
+      window.history.pushState({}, "", "/login");
+    }
+  });
+
+  it("displays an oauth_failed alert when redirected with oauth_failed", () => {
+    window.history.pushState({}, "", "/login?error=oauth_failed");
+    try {
+      render(<LoginForm />);
+      expect(screen.getByText("Unable to sign in with Google. Please try again.")).toBeInTheDocument();
+    } finally {
+      window.history.pushState({}, "", "/login");
+    }
   });
 });

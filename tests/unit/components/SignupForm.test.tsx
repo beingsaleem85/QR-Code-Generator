@@ -11,8 +11,14 @@ vi.mock("next/navigation", () => ({
 
 // Never resolves — see LoginForm.test.tsx for why.
 const signUpMock = vi.fn(() => new Promise(() => {}));
+const signInWithOAuthMock = vi.fn(() => new Promise(() => {}));
 vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({ auth: { signUp: signUpMock } }),
+  createClient: () => ({
+    auth: {
+      signUp: signUpMock,
+      signInWithOAuth: signInWithOAuthMock,
+    },
+  }),
 }));
 
 afterEach(() => cleanup());
@@ -92,5 +98,11 @@ describe("SignupForm", () => {
 
     expect(await screen.findByText("User already registered")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create account" })).toBeEnabled();
+  });
+
+  it("renders the Continue with Google button and email divider", () => {
+    render(<SignupForm />);
+    expect(screen.getByRole("button", { name: /continue with google/i })).toBeInTheDocument();
+    expect(screen.getByText(/or continue with email/i)).toBeInTheDocument();
   });
 });

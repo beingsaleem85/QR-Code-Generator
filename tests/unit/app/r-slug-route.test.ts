@@ -65,7 +65,8 @@ describe("GET /r/[slug]", () => {
     expect(response.headers.get("location")).toBeNull();
     expect(response.headers.get("content-type")).toMatch(/text\/html/);
     const body = await response.text();
-    expect(body).toContain("Link not active");
+    expect(body).toContain("This QR code is currently inactive");
+    expect(body).toContain("The QR code owner needs to reactivate their QRForge account.");
   });
 
   it("records a scan (referrer, user-agent, edge country header) without delaying the redirect", async () => {

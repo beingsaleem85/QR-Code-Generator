@@ -6,4 +6,5 @@ export interface UserProfile {
   displayName: string | null;
   email: string;
   avatarUrl: string | null;
+  createdAt?: string;
 }

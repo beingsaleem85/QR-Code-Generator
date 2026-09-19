@@ -6,8 +6,30 @@ import { createBrowserClient } from "@supabase/ssr";
  * privileged key.
  */
 export function createClient() {
+  let url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  let anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    if (process.env.NODE_ENV === "test") {
+      url = url || "https://placeholder.supabase.co";
+      anonKey = anonKey || "placeholder-anon-key";
+    } else {
+      throw new Error(
+        "Missing required Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be defined."
+      );
+    }
+  }
+
   return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
+    {
+      isSingleton: true,
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    },
   );
 }

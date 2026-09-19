@@ -4,6 +4,7 @@ import { useState, type ChangeEvent } from "react";
 import { FormField } from "@/components/ui/FormField";
 import { Button } from "@/components/ui/Button";
 import { uploadQrAsset, AssetValidationError } from "@/lib/qr/asset-upload";
+import { setLocalPdfBlobUrl, revokeLocalPdfBlobUrl } from "@/lib/qr/pdf-blob-cache";
 import type { PdfQrInput } from "@/lib/validation/qr";
 
 interface PdfFormProps {
@@ -29,10 +30,24 @@ export function PdfForm({ value, onChange }: PdfFormProps) {
     event.target.value = "";
     if (!file) return;
 
+    if (current.path) {
+      revokeLocalPdfBlobUrl(current.path);
+    }
+
+    let localBlobUrl: string | null = null;
+    try {
+      localBlobUrl = URL.createObjectURL(file);
+    } catch {
+      // Environments without URL.createObjectURL
+    }
+
     setError(null);
     setUploading(true);
     try {
       const asset = await uploadQrAsset("pdf", file);
+      if (localBlobUrl) {
+        setLocalPdfBlobUrl(asset.path, localBlobUrl);
+      }
       onChange({
         ...current,
         path: asset.path,
@@ -70,11 +85,36 @@ export function PdfForm({ value, onChange }: PdfFormProps) {
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => onChange({})}
+            onClick={() => {
+              if (current.path) {
+                revokeLocalPdfBlobUrl(current.path);
+              }
+              onChange({});
+            }}
             aria-label="Remove PDF"
           >
             Remove
           </Button>
+        </div>
+      ) : null}
+
+      {current.path ? (
+        <div className="mt-3 flex flex-col gap-1">
+          <label htmlFor="pdf-public-title" className="text-xs font-medium text-foreground">
+            Display name (optional)
+          </label>
+          <input
+            id="pdf-public-title"
+            type="text"
+            value={typeof current.publicTitle === "string" ? current.publicTitle : ""}
+            onChange={(event) => onChange({ ...current, publicTitle: event.target.value })}
+            placeholder="e.g. Company Presentation (defaults to document.pdf)"
+            className="h-9 rounded-lg border border-border bg-surface px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary"
+          />
+          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span>Auto short URL protected: Visitors see an anonymous short link. Your local filename is never exposed.</span>
+          </div>
         </div>
       ) : null}
 

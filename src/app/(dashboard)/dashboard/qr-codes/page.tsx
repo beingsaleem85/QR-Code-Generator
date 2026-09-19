@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
-import { QRCodeCard } from "@/components/dashboard/QRCodeCard";
-import { QRCodeTable } from "@/components/dashboard/QRCodeTable";
+import { QRCodeListContainer } from "@/components/dashboard/QRCodeListContainer";
 import { QRCodesFilterBar } from "@/components/dashboard/QRCodesFilterBar";
 import { FolderManager } from "@/components/dashboard/FolderManager";
 import { Pagination } from "@/components/dashboard/Pagination";
 import { buttonVariants } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { listQrCodesPage } from "@/lib/qr/queries";
 import { parseQrListSearchParams, type QrListSearchParams } from "@/lib/qr/list-filters";
 import { listMyFolders } from "@/lib/folders/queries";
@@ -21,7 +19,7 @@ export default async function QrCodesListPage({ searchParams }: QrCodesListPageP
   const filters = parseQrListSearchParams(rawParams);
   const hasActiveFilters = Object.keys(filters).some((key) => key !== "page");
 
-  const [{ items, totalCount, page, pageCount }, folders] = await Promise.all([
+  const [{ items, totalCount, page, pageCount, pageSize }, folders] = await Promise.all([
     listQrCodesPage(filters),
     listMyFolders(),
   ]);
@@ -68,15 +66,13 @@ export default async function QrCodesListPage({ searchParams }: QrCodesListPageP
           />
         ) : (
           <>
-            <Card className="hidden overflow-x-auto md:block">
-              <QRCodeTable qrCodes={items} folders={folders} />
-            </Card>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">
-              {items.map((qrCode) => (
-                <QRCodeCard key={qrCode.id} qrCode={qrCode} folders={folders} />
-              ))}
-            </div>
-            <Pagination page={page} pageCount={pageCount} totalCount={totalCount} />
+            <QRCodeListContainer items={items} folders={folders} />
+            <Pagination
+              page={page}
+              pageCount={pageCount}
+              totalCount={totalCount}
+              pageSize={pageSize}
+            />
           </>
         )}
 

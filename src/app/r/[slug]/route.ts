@@ -87,8 +87,8 @@ export async function GET(request: Request, context: { params: Promise<{ slug: s
   if (resolution.status === "inactive") {
     return renderUnavailablePage(
       410,
-      "Link not active",
-      "The owner has paused or archived this QR code. Check back later or contact them directly.",
+      "This QR code is currently inactive",
+      "The QR code owner needs to reactivate their QRForge account.",
     );
   }
 

@@ -1,5 +1,6 @@
 import { getQrMatrix } from "@/lib/qr/matrix";
 import { renderQrSvg } from "@/lib/qr/render";
+import { renderDataMatrixSvg } from "@/lib/qr/datamatrix";
 import {
   clampLogoSizeRatio,
   getContrastWarning,
@@ -7,6 +8,7 @@ import {
   MIN_QUIET_ZONE_MODULES,
 } from "@/lib/qr/reliability";
 import type { DesignConfig } from "@/types/qr-design";
+import type { QRType } from "@/types/qr";
 
 const CELL = 10;
 
@@ -27,6 +29,14 @@ function escapeXml(value: string): string {
 
 function moduleShape(x: number, y: number, style: string, fill: string): string {
   switch (style) {
+    case "micro-dots": {
+      const r = (CELL / 2) * 0.42;
+      return `<circle cx="${x + CELL / 2}" cy="${y + CELL / 2}" r="${r}" fill="${fill}" />`;
+    }
+    case "fine-dots": {
+      const r = (CELL / 2) * 0.58;
+      return `<circle cx="${x + CELL / 2}" cy="${y + CELL / 2}" r="${r}" fill="${fill}" />`;
+    }
     case "dots": {
       const r = (CELL / 2) * 0.85;
       return `<circle cx="${x + CELL / 2}" cy="${y + CELL / 2}" r="${r}" fill="${fill}" />`;
@@ -42,13 +52,24 @@ function eyeOuterShape(x: number, y: number, size: number, style: string, color:
   const strokeWidth = CELL;
   const inset = strokeWidth / 2;
   const rectSize = size - strokeWidth;
-  const rx = style === "rounded" ? strokeWidth : style === "dot" ? rectSize / 2 : 0;
+  const rx =
+    style === "rounded"
+      ? strokeWidth
+      : style === "dot" || style === "circle"
+        ? rectSize / 2
+        : 0;
   return `<rect x="${x + inset}" y="${y + inset}" width="${rectSize}" height="${rectSize}" rx="${rx}" fill="none" stroke="${color}" stroke-width="${strokeWidth}" />`;
 }
 
 function eyeInnerShape(x: number, y: number, size: number, style: string, color: string): string {
-  if (style === "dot") {
+  if (style === "dot" || style === "circle") {
     return `<circle cx="${x + size / 2}" cy="${y + size / 2}" r="${size / 2}" fill="${color}" />`;
+  }
+  if (style === "diamond") {
+    const cx = x + size / 2;
+    const cy = y + size / 2;
+    const half = size / 2;
+    return `<polygon points="${cx},${cy - half} ${cx + half},${cy} ${cx},${cy + half} ${cx - half},${cy}" fill="${color}" />`;
   }
   const rx = style === "rounded" ? size * 0.3 : 0;
   return `<rect x="${x}" y="${y}" width="${size}" height="${size}" rx="${rx}" fill="${color}" />`;
@@ -66,7 +87,23 @@ function eyeInnerShape(x: number, y: number, size: number, style: string, color:
 export async function renderStyledQrSvg(
   payload: string,
   design: DesignConfig,
+  qrType?: QRType,
 ): Promise<StyledQrResult> {
+  if (qrType === "barcode_2d") {
+    try {
+      const svg = renderDataMatrixSvg(payload, design);
+      const warnings: string[] = [];
+      const contrastWarning = getContrastWarning(
+        design.colors.foreground,
+        design.colors.transparentBackground ? "#ffffff" : design.colors.background,
+      );
+      if (contrastWarning) warnings.push(contrastWarning);
+      return { svg, warnings };
+    } catch {
+      // Fall through to regular renderer if datamatrix fails
+    }
+  }
+
   try {
     return renderStyledQrSvgUnsafe(payload, design);
   } catch {
@@ -95,13 +132,20 @@ function renderStyledQrSvgUnsafe(payload: string, design: DesignConfig): StyledQ
   const quiet = MIN_QUIET_ZONE_MODULES * CELL;
   const core = qrSize + 2 * quiet;
 
-  const hasBorderFrame = frame.style === "simple" || frame.style === "rounded";
-  const border = hasBorderFrame ? 2 * CELL : 0;
+  const hasBorderFrame =
+    frame.style === "simple" ||
+    frame.style === "rounded" ||
+    frame.style === "boxed" ||
+    frame.style === "poster";
+  const isSplit = frame.style === "split";
+  const border = hasBorderFrame || isSplit ? 2 * CELL : 0;
+  const topHeaderHeight = isSplit ? 2.5 * CELL : 0;
   const ctaHeight = frame.style && frame.ctaText ? 3.5 * CELL : 0;
 
   const width = core + 2 * border;
-  const height = core + 2 * border + ctaHeight;
+  const height = core + 2 * border + topHeaderHeight + ctaHeight;
   const qrOffset = border + quiet;
+  const qrYOffset = border + quiet + topHeaderHeight;
 
   let defs = "";
   let fill = colors.foreground;
@@ -115,20 +159,34 @@ function renderStyledQrSvgUnsafe(payload: string, design: DesignConfig): StyledQ
 
   let body = "";
 
-  if (hasBorderFrame) {
-    const rx = frame.style === "rounded" ? border : 0;
-    body += `<rect x="0" y="0" width="${width}" height="${core + 2 * border}" rx="${rx}" fill="${frame.color}" />`;
+  if (frame.style === "rounded") {
+    const rx = border * 1.2;
+    body += `<rect x="0" y="0" width="${width}" height="${height}" rx="${rx}" fill="${frame.color}" />`;
+  } else if (frame.style === "simple") {
+    body += `<rect x="0" y="0" width="${width}" height="${height}" rx="0" fill="${frame.color}" />`;
+  } else if (frame.style === "boxed") {
+    const strokeWidth = border * 0.75;
+    body += `<rect x="${strokeWidth / 2}" y="${strokeWidth / 2}" width="${width - strokeWidth}" height="${height - strokeWidth}" rx="6" fill="none" stroke="${frame.color}" stroke-width="${strokeWidth}" />`;
+    body += `<rect x="0" y="${height - ctaHeight}" width="${width}" height="${ctaHeight}" rx="0" fill="${frame.color}" />`;
+  } else if (frame.style === "poster") {
+    body += `<rect x="0" y="0" width="${width}" height="${height}" rx="${border * 1.5}" fill="${frame.color}" opacity="0.12" />`;
+    body += `<rect x="0" y="0" width="${width}" height="${height}" rx="${border * 1.5}" fill="none" stroke="${frame.color}" stroke-width="2.5" />`;
+    const pillMargin = border * 0.5;
+    body += `<rect x="${pillMargin}" y="${height - ctaHeight - 2}" width="${width - 2 * pillMargin}" height="${ctaHeight}" rx="${ctaHeight / 2}" fill="${frame.color}" />`;
+  } else if (frame.style === "split") {
+    body += `<rect x="0" y="0" width="${width}" height="${topHeaderHeight}" rx="0" fill="${frame.color}" />`;
+    body += `<rect x="0" y="${height - ctaHeight}" width="${width}" height="${ctaHeight}" rx="0" fill="${frame.color}" />`;
   }
 
   if (!colors.transparentBackground) {
-    body += `<rect x="${border}" y="${border}" width="${core}" height="${core}" fill="${colors.background}" />`;
+    body += `<rect x="${border}" y="${border + topHeaderHeight}" width="${core}" height="${core}" fill="${colors.background}" />`;
   }
 
   for (let row = 0; row < matrix.size; row++) {
     for (let col = 0; col < matrix.size; col++) {
       if (!matrix.isDark(row, col) || matrix.isFinderRegion(row, col)) continue;
       const x = qrOffset + col * CELL;
-      const y = qrOffset + row * CELL;
+      const y = qrYOffset + row * CELL;
       body += moduleShape(x, y, pattern.dotStyle, fill);
     }
   }
@@ -140,7 +198,7 @@ function renderStyledQrSvgUnsafe(payload: string, design: DesignConfig): StyledQ
   ];
   for (const [rowStart, colStart] of finderCorners) {
     const x = qrOffset + colStart * CELL;
-    const y = qrOffset + rowStart * CELL;
+    const y = qrYOffset + rowStart * CELL;
     const outerSize = 7 * CELL;
     const innerSize = 3 * CELL;
     const innerOffset = 2 * CELL;
@@ -161,10 +219,11 @@ function renderStyledQrSvgUnsafe(payload: string, design: DesignConfig): StyledQ
     }
     const logoSize = qrSize * clampedRatio;
     const logoX = qrOffset + (qrSize - logoSize) / 2;
-    const logoY = qrOffset + (qrSize - logoSize) / 2;
+    const logoY = qrYOffset + (qrSize - logoSize) / 2;
 
     if (logo.whiteMargin) {
-      const pad = logoSize * 0.15;
+      // 50% reduced white margin per Requirement C (reduced from 0.15 to 0.075)
+      const pad = logoSize * 0.075;
       const bg = colors.transparentBackground ? "#ffffff" : colors.background;
       body += `<rect x="${logoX - pad}" y="${logoY - pad}" width="${logoSize + 2 * pad}" height="${logoSize + 2 * pad}" rx="${(logoSize + 2 * pad) * 0.15}" fill="${bg}" />`;
     }
@@ -172,12 +231,15 @@ function renderStyledQrSvgUnsafe(payload: string, design: DesignConfig): StyledQ
   }
 
   if (frame.style && frame.ctaText) {
-    const barY = frame.style === "badge" ? core : core + 2 * border;
+    const barY = height - ctaHeight;
     if (frame.style === "badge") {
-      body += `<rect x="0" y="${barY}" width="${width}" height="${ctaHeight}" fill="${frame.color}" />`;
+      const badgeWidth = Math.min(width * 0.85, 160);
+      const badgeX = (width - badgeWidth) / 2;
+      body += `<rect x="${badgeX}" y="${barY}" width="${badgeWidth}" height="${ctaHeight}" rx="${ctaHeight / 2}" fill="${frame.color}" />`;
     }
+    const textY = frame.style === "poster" ? barY + ctaHeight / 2 - 2 : barY + ctaHeight / 2;
     const fontFamily = frame.ctaFont || "sans-serif";
-    body += `<text x="${width / 2}" y="${barY + ctaHeight / 2}" text-anchor="middle" dominant-baseline="middle" font-family="${escapeXml(fontFamily)}" font-size="${CELL * 2}" fill="#ffffff">${escapeXml(frame.ctaText)}</text>`;
+    body += `<text x="${width / 2}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-family="${escapeXml(fontFamily)}" font-size="${CELL * 1.8}" font-weight="bold" fill="#ffffff">${escapeXml(frame.ctaText)}</text>`;
   }
 
   const svg =
@@ -208,8 +270,9 @@ export async function renderStyledQrPngDataUrl(
   payload: string,
   design: DesignConfig,
   targetWidth = 512,
+  qrType?: QRType,
 ): Promise<StyledQrPngResult> {
-  const { svg, warnings } = await renderStyledQrSvg(payload, design);
+  const { svg, warnings } = await renderStyledQrSvg(payload, design, qrType);
 
   const svgWidth = Number(svg.match(/\swidth="([\d.]+)"/)?.[1] ?? targetWidth);
   const svgHeight = Number(svg.match(/\sheight="([\d.]+)"/)?.[1] ?? targetWidth);

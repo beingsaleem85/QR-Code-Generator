@@ -5,8 +5,6 @@ import { toQrScanEvent, type QrScanEventDbRow } from "@/lib/qr/scan-records";
 import { toQrFeedbackSubmission, type QrFeedbackSubmissionDbRow } from "@/lib/qr/feedback-records";
 import type { QrScanEvent } from "@/types/analytics";
 import type { QrFeedbackSubmission } from "@/types/feedback";
-import type { QRMode, QRType } from "@/types/qr";
-import type { QRCodeStatus } from "@/types/qr-record";
 
 /**
  * Read-only, RLS-scoped `qr_codes` queries for Server Components. No
@@ -32,45 +30,57 @@ export async function listQrCodes(options?: {
   return (data as QrCodeDbRow[]).map(toQrCodeRecord);
 }
 
-export type QrSortField = "updated_at" | "created_at" | "name" | "scan_count_cached";
-export type SortDirection = "asc" | "desc";
+export {
+  DEFAULT_PAGE_SIZE,
+  ALLOWED_PAGE_SIZES,
+  SORT_FIELDS,
+  isQrSortField,
+  type AllowedPageSize,
+  type QrSortField,
+  type SortDirection,
+  type ListQrCodesPageFilters,
+  type QrCodesPage,
+} from "@/lib/qr/list-constants";
+import {
+  type QrSortField,
+  type ListQrCodesPageFilters,
+  type QrCodesPage,
+  ALLOWED_PAGE_SIZES,
+  DEFAULT_PAGE_SIZE,
+} from "@/lib/qr/list-constants";
 
-const SORT_FIELDS: readonly QrSortField[] = [
-  "updated_at",
-  "created_at",
-  "name",
-  "scan_count_cached",
-];
+function applyListFilters(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  baseQuery: any,
+  filters: ListQrCodesPageFilters,
+  sortBy: QrSortField,
+  ascending: boolean,
+) {
+  let q = baseQuery;
+  if (filters.status) {
+    q = q.eq("status", filters.status);
+  } else {
+    q = q.neq("status", "archived");
+  }
+  if (filters.search?.trim()) {
+    const escaped = filters.search.trim().replace(/[%_]/g, (match: string) => `\\${match}`);
+    q = q.ilike("name", `%${escaped}%`);
+  }
+  if (filters.qrType) {
+    q = q.eq("qr_type", filters.qrType);
+  }
+  if (filters.mode) {
+    q = q.eq("mode", filters.mode);
+  }
+  if (filters.folderId === "unfiled") {
+    q = q.is("folder_id", null);
+  } else if (filters.folderId) {
+    q = q.eq("folder_id", filters.folderId);
+  }
 
-export function isQrSortField(value: string): value is QrSortField {
-  return (SORT_FIELDS as readonly string[]).includes(value);
+  // Stable deterministic sorting with unique ID tie-breaker
+  return q.order(sortBy, { ascending }).order("id", { ascending: true });
 }
-
-export interface ListQrCodesPageFilters {
-  search?: string;
-  qrType?: QRType;
-  mode?: QRMode;
-  /** Omitted = every non-archived status (the default dashboard view). */
-  status?: QRCodeStatus;
-  /** `"unfiled"` = codes with no folder assigned; omitted = every folder. */
-  folderId?: string | "unfiled";
-  sortBy?: QrSortField;
-  sortDirection?: SortDirection;
-  /** 1-indexed. */
-  page?: number;
-  pageSize?: number;
-}
-
-export interface QrCodesPage {
-  items: QrCodeRecord[];
-  totalCount: number;
-  page: number;
-  pageSize: number;
-  pageCount: number;
-}
-
-const DEFAULT_PAGE_SIZE = 20;
-const MAX_PAGE_SIZE = 100;
 
 /**
  * The real, database-driven counterpart to `listQrCodes()` above — every
@@ -87,40 +97,22 @@ const MAX_PAGE_SIZE = 100;
 export async function listQrCodesPage(filters: ListQrCodesPageFilters = {}): Promise<QrCodesPage> {
   const supabase = await createClient();
 
+  const requestedPageSize = Math.floor(filters.pageSize ?? DEFAULT_PAGE_SIZE);
+  const pageSize = (ALLOWED_PAGE_SIZES as readonly number[]).includes(requestedPageSize)
+    ? requestedPageSize
+    : DEFAULT_PAGE_SIZE;
+
   const page = Math.max(1, Math.floor(filters.page ?? 1));
-  const pageSize = Math.min(
-    MAX_PAGE_SIZE,
-    Math.max(1, Math.floor(filters.pageSize ?? DEFAULT_PAGE_SIZE)),
-  );
   const sortBy = filters.sortBy ?? "updated_at";
   const ascending = filters.sortDirection === "asc";
 
-  let query = supabase.from("qr_codes").select("*", { count: "exact" });
+  let query = applyListFilters(
+    supabase.from("qr_codes").select("*", { count: "exact" }),
+    filters,
+    sortBy,
+    ascending,
+  );
 
-  if (filters.status) {
-    query = query.eq("status", filters.status);
-  } else {
-    query = query.neq("status", "archived");
-  }
-  if (filters.search?.trim()) {
-    // Escape ilike's own wildcard characters so a literal "%"/"_" in a
-    // search term is matched literally, not treated as a pattern.
-    const escaped = filters.search.trim().replace(/[%_]/g, (match) => `\\${match}`);
-    query = query.ilike("name", `%${escaped}%`);
-  }
-  if (filters.qrType) {
-    query = query.eq("qr_type", filters.qrType);
-  }
-  if (filters.mode) {
-    query = query.eq("mode", filters.mode);
-  }
-  if (filters.folderId === "unfiled") {
-    query = query.is("folder_id", null);
-  } else if (filters.folderId) {
-    query = query.eq("folder_id", filters.folderId);
-  }
-
-  query = query.order(sortBy, { ascending });
   const from = (page - 1) * pageSize;
   query = query.range(from, from + pageSize - 1);
 
@@ -128,12 +120,33 @@ export async function listQrCodesPage(filters: ListQrCodesPageFilters = {}): Pro
   if (error) throw new Error(error.message);
 
   const totalCount = count ?? 0;
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+  let finalPage = page;
+  let items = ((data as QrCodeDbRow[]) ?? []).map(toQrCodeRecord);
+
+  // Clamp to valid page when results shrink (e.g. after deletion or search narrowing)
+  if (totalCount > 0 && page > pageCount) {
+    finalPage = pageCount;
+    const clampedFrom = (finalPage - 1) * pageSize;
+    let clampedQuery = applyListFilters(
+      supabase.from("qr_codes").select("*"),
+      filters,
+      sortBy,
+      ascending,
+    );
+    clampedQuery = clampedQuery.range(clampedFrom, clampedFrom + pageSize - 1);
+    const { data: clampedData, error: clampedError } = await clampedQuery;
+    if (!clampedError && clampedData) {
+      items = (clampedData as QrCodeDbRow[]).map(toQrCodeRecord);
+    }
+  }
+
   return {
-    items: (data as QrCodeDbRow[]).map(toQrCodeRecord),
+    items,
     totalCount,
-    page,
+    page: finalPage,
     pageSize,
-    pageCount: Math.max(1, Math.ceil(totalCount / pageSize)),
+    pageCount,
   };
 }
 

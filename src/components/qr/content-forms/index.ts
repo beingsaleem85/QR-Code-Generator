@@ -18,6 +18,8 @@ import { SocialForm } from "@/components/qr/content-forms/SocialForm";
 import { MultiLinkForm } from "@/components/qr/content-forms/MultiLinkForm";
 import { MenuForm } from "@/components/qr/content-forms/MenuForm";
 import { FeedbackForm } from "@/components/qr/content-forms/FeedbackForm";
+import { LocationForm } from "@/components/qr/content-forms/LocationForm";
+import { Barcode2DForm } from "@/components/qr/content-forms/Barcode2DForm";
 
 export interface ContentFormProps {
   value: Record<string, unknown>;
@@ -25,9 +27,7 @@ export interface ContentFormProps {
 }
 
 /**
- * Maps a QRType to its content form — only types with a real Zod schema in
- * the registry have an entry. The rest (`barcode_2d`, `location`) fall back
- * to a "coming soon" note in QRContentPanel.
+ * Maps a QRType to its content form.
  */
 export const CONTENT_FORMS: Partial<Record<QRType, ComponentType<ContentFormProps>>> = {
   url: UrlForm,
@@ -48,4 +48,6 @@ export const CONTENT_FORMS: Partial<Record<QRType, ComponentType<ContentFormProp
   multi_link: MultiLinkForm,
   menu: MenuForm,
   feedback: FeedbackForm,
+  location: LocationForm,
+  barcode_2d: Barcode2DForm,
 };
