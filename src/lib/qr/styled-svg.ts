@@ -10,8 +10,8 @@ import type { DesignConfig } from "@/types/qr-design";
 import type { QRType } from "@/types/qr";
 
 const CELL = 10;
-/** Exact 2px outer padding on all sides (Top: 2px, Right: 2px, Bottom: 2px, Left: 2px) */
-export const QR_OUTER_PADDING = 2;
+/** Exact 10px outer padding on all sides (Top: 10px, Right: 10px, Bottom: 10px, Left: 10px) */
+export const QR_OUTER_PADDING = 10;
 
 export interface StyledQrResult {
   svg: string;
@@ -130,7 +130,7 @@ function renderStyledQrSvgUnsafe(payload: string, design: DesignConfig): StyledQ
   if (contrastWarning) warnings.push(contrastWarning);
 
   const qrSize = matrix.size * CELL;
-  // Normalized 2px outer padding on all sides (Top: 2px, Right: 2px, Bottom: 2px, Left: 2px).
+  // Normalized 10px outer padding on all sides (Top: 10px, Right: 10px, Bottom: 10px, Left: 10px).
   // Applies consistently to both existing saved QR codes and newly created QR codes.
   const quiet = QR_OUTER_PADDING;
   const core = qrSize + 2 * quiet;

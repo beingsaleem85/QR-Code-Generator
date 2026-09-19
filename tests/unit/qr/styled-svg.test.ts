@@ -190,7 +190,7 @@ describe("renderStyledQrSvg", () => {
     expect(warnings.some((w) => w.includes("simplified"))).toBe(true);
   });
 
-  it("applies exactly 2px outer white padding on all sides (Top, Right, Bottom, Left)", async () => {
+  it("applies exactly 10px outer white padding on all sides (Top, Right, Bottom, Left)", async () => {
     const { svg } = await renderStyledQrSvg(PAYLOAD, DEFAULT_DESIGN_CONFIG);
 
     // Extract viewBox width & height
@@ -199,35 +199,35 @@ describe("renderStyledQrSvg", () => {
     const width = Number(viewBoxMatch![1]);
     const height = Number(viewBoxMatch![2]);
 
-    // Top-left finder outer rect is at x=2+5=7, y=2+5=7 with stroke-width=10,
-    // so its visual outer edge starts at exactly x=2, y=2 (giving 2px top & left padding)
-    expect(svg).toContain('<rect x="7" y="7" width="60" height="60"');
+    // Top-left finder outer rect is at x=10+5=15, y=10+5=15 with stroke-width=10,
+    // so its visual outer edge starts at exactly x=10, y=10 (giving 10px top & left padding)
+    expect(svg).toContain('<rect x="15" y="15" width="60" height="60"');
 
     // White background rect matches exact viewBox width & height
     expect(svg).toContain(`<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff" />`);
 
-    // The QR size in modules is (width - 4) / 10
-    const qrSize = width - 4;
+    // The QR size in modules is (width - 20) / 10
+    const qrSize = width - 20;
     expect(qrSize % 10).toBe(0);
 
-    // Top-right finder outer rect is at x = 2 + (qrSize - 70) + 5 = qrSize - 63.
-    // Outer edge is at (qrSize - 63) + 65 = qrSize + 2.
-    // Margin to right edge (width = qrSize + 4): (qrSize + 4) - (qrSize + 2) = 2px!
-    const trX = 2 + qrSize - 70 + 5;
-    expect(svg).toContain(`<rect x="${trX}" y="7" width="60" height="60"`);
+    // Top-right finder outer rect is at x = 10 + (qrSize - 70) + 5 = qrSize - 55.
+    // Outer edge is at (qrSize - 55) + 65 = qrSize + 10.
+    // Margin to right edge (width = qrSize + 20): (qrSize + 20) - (qrSize + 10) = 10px!
+    const trX = 10 + qrSize - 70 + 5;
+    expect(svg).toContain(`<rect x="${trX}" y="15" width="60" height="60"`);
   });
 
-  it("normalizes existing/legacy QR configurations with custom margin properties to 2px outer padding", async () => {
+  it("normalizes existing/legacy QR configurations with custom margin properties to 10px outer padding", async () => {
     const legacyDesignWithMargin = {
       ...DEFAULT_DESIGN_CONFIG,
-      margin: 10,
+      margin: 40,
       quietZone: 8,
-      padding: 20,
+      padding: 50,
     } as unknown as typeof DEFAULT_DESIGN_CONFIG;
 
     const { svg } = await renderStyledQrSvg(PAYLOAD, legacyDesignWithMargin);
 
-    // Must still use exactly 2px offset (x=7, y=7 with stroke 10)
-    expect(svg).toContain('<rect x="7" y="7" width="60" height="60"');
+    // Must still use exactly 10px offset (x=15, y=15 with stroke 10)
+    expect(svg).toContain('<rect x="15" y="15" width="60" height="60"');
   });
 });

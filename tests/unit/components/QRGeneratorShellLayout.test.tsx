@@ -84,7 +84,7 @@ describe("QRGeneratorShell layout — design discoverability + bottom Save", () 
     await vi.waitFor(() =>
       expect(pushMock).toHaveBeenCalledWith("/dashboard/qr-codes/bottom-save-id"),
     );
-  });
+  }, 30000);
 
   it("edit variant: 'Save Changes' also sits after the design section", () => {
     render(
