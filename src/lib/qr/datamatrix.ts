@@ -36,8 +36,8 @@ export function renderDataMatrixSvg(payload: string, design?: DesignConfig): str
     includetext: false,
     barcolor: fgHex,
     backgroundcolor: isTransparent ? undefined : bgHex,
-    paddingwidth: 4,
-    paddingheight: 4,
+    paddingwidth: 2,
+    paddingheight: 2,
   });
 
   // Extract viewBox if present, and add width and height attributes if missing for canvas drawing
