@@ -9,6 +9,7 @@ import { QRModeToggle } from "@/components/qr/QRModeToggle";
 import { QRNameField } from "@/components/qr/QRNameField";
 import { QRPreviewPanel } from "@/components/qr/QRPreviewPanel";
 import { QRTypeSelector } from "@/components/qr/QRTypeSelector";
+import { QRVersionSelector } from "@/components/qr/QRVersionSelector";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { UpgradeModal } from "@/components/account/UpgradeModal";
@@ -296,9 +297,17 @@ export function QRGeneratorShell({
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-end gap-4">
-        <QRModeToggle mode={mode} onModeChange={handleModeChange} />
-        <QRNameField name={name} onNameChange={setName} />
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <QRModeToggle mode={mode} onModeChange={handleModeChange} />
+          <QRNameField name={name} onNameChange={setName} />
+        </div>
+        {qrType !== "barcode_2d" ? (
+          <QRVersionSelector
+            value={design.version ?? "auto"}
+            onChange={(nextVersion) => setDesign({ ...design, version: nextVersion })}
+          />
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-3">

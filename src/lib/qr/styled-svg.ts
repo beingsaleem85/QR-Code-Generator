@@ -1,4 +1,4 @@
-import { getQrMatrix } from "@/lib/qr/matrix";
+import { getQrMatrix, QrCapacityError } from "@/lib/qr/matrix";
 import { renderQrSvg } from "@/lib/qr/render";
 import { renderDataMatrixSvg } from "@/lib/qr/datamatrix";
 import {
@@ -17,6 +17,9 @@ export interface StyledQrResult {
   svg: string;
   /** User-facing reliability notices — contrast, clamped logo size, fallback used. */
   warnings: string[];
+  error?: string;
+  version?: number;
+  matrixSize?: number;
 }
 
 function escapeXml(value: string): string {
@@ -81,9 +84,8 @@ function eyeInnerShape(x: number, y: number, size: number, style: string, color:
  * gradients, logo overlay, and frames, built directly off the QR's raw
  * module matrix (`getQrMatrix`) rather than any library's fixed SVG
  * output. Falls back to the plain Module 3.2 renderer (solid colors only)
- * if anything here throws — the "fallback if a styling option is
- * unsupported" reliability rule, implemented as real behavior rather than
- * just documented.
+ * if styling fails, but preserves strict capacity errors when fixed QR
+ * versions are requested.
  */
 export async function renderStyledQrSvg(
   payload: string,
@@ -107,7 +109,14 @@ export async function renderStyledQrSvg(
 
   try {
     return renderStyledQrSvgUnsafe(payload, design);
-  } catch {
+  } catch (err: unknown) {
+    if (err instanceof QrCapacityError) {
+      return {
+        svg: "",
+        warnings: [],
+        error: err.message,
+      };
+    }
     const svg = await renderQrSvg(payload, design);
     return {
       svg,
@@ -121,7 +130,8 @@ function renderStyledQrSvgUnsafe(payload: string, design: DesignConfig): StyledQ
   const warnings: string[] = [];
 
   const hasLogo = !!logo.assetUrl;
-  const matrix = getQrMatrix(payload, getRecommendedErrorCorrectionLevel(hasLogo));
+  const ecLevel = design.errorCorrectionLevel ?? getRecommendedErrorCorrectionLevel(hasLogo);
+  const matrix = getQrMatrix(payload, ecLevel, design.version ?? "auto");
 
   const contrastWarning = getContrastWarning(
     colors.foreground,
@@ -130,9 +140,13 @@ function renderStyledQrSvgUnsafe(payload: string, design: DesignConfig): StyledQ
   if (contrastWarning) warnings.push(contrastWarning);
 
   const qrSize = matrix.size * CELL;
-  // Normalized 10px outer padding on all sides (Top: 10px, Right: 10px, Bottom: 10px, Left: 10px).
-  // Applies consistently to both existing saved QR codes and newly created QR codes.
-  const quiet = QR_OUTER_PADDING;
+
+  // Maintain at least the QR-standard minimum 4-module quiet zone around the actual QR symbol
+  // for Version 10, Version 25, Version 40 (4 * CELL = 40px).
+  // For Auto mode without a forced version, preserve the existing 10px visual outer padding.
+  const isForcedLargeVersion =
+    design.version === 10 || design.version === 25 || design.version === 40;
+  const quiet = isForcedLargeVersion ? 4 * CELL : QR_OUTER_PADDING;
   const core = qrSize + 2 * quiet;
 
   const hasBorderFrame =
@@ -160,29 +174,29 @@ function renderStyledQrSvgUnsafe(payload: string, design: DesignConfig): StyledQ
     fill = "url(#qr-fg-gradient)";
   }
 
-  let body = "";
+  const bodyParts: string[] = [];
 
   if (frame.style === "rounded") {
     const rx = border * 1.2;
-    body += `<rect x="0" y="0" width="${width}" height="${height}" rx="${rx}" fill="${frame.color}" />`;
+    bodyParts.push(`<rect x="0" y="0" width="${width}" height="${height}" rx="${rx}" fill="${frame.color}" />`);
   } else if (frame.style === "simple") {
-    body += `<rect x="0" y="0" width="${width}" height="${height}" rx="0" fill="${frame.color}" />`;
+    bodyParts.push(`<rect x="0" y="0" width="${width}" height="${height}" rx="0" fill="${frame.color}" />`);
   } else if (frame.style === "boxed") {
     const strokeWidth = border * 0.75;
-    body += `<rect x="${strokeWidth / 2}" y="${strokeWidth / 2}" width="${width - strokeWidth}" height="${height - strokeWidth}" rx="6" fill="none" stroke="${frame.color}" stroke-width="${strokeWidth}" />`;
-    body += `<rect x="0" y="${height - ctaHeight}" width="${width}" height="${ctaHeight}" rx="0" fill="${frame.color}" />`;
+    bodyParts.push(`<rect x="${strokeWidth / 2}" y="${strokeWidth / 2}" width="${width - strokeWidth}" height="${height - strokeWidth}" rx="6" fill="none" stroke="${frame.color}" stroke-width="${strokeWidth}" />`);
+    bodyParts.push(`<rect x="0" y="${height - ctaHeight}" width="${width}" height="${ctaHeight}" rx="0" fill="${frame.color}" />`);
   } else if (frame.style === "poster") {
-    body += `<rect x="0" y="0" width="${width}" height="${height}" rx="${border * 1.5}" fill="${frame.color}" opacity="0.12" />`;
-    body += `<rect x="0" y="0" width="${width}" height="${height}" rx="${border * 1.5}" fill="none" stroke="${frame.color}" stroke-width="2.5" />`;
+    bodyParts.push(`<rect x="0" y="0" width="${width}" height="${height}" rx="${border * 1.5}" fill="${frame.color}" opacity="0.12" />`);
+    bodyParts.push(`<rect x="0" y="0" width="${width}" height="${height}" rx="${border * 1.5}" fill="none" stroke="${frame.color}" stroke-width="2.5" />`);
     const pillMargin = border * 0.5;
-    body += `<rect x="${pillMargin}" y="${height - ctaHeight - 2}" width="${width - 2 * pillMargin}" height="${ctaHeight}" rx="${ctaHeight / 2}" fill="${frame.color}" />`;
+    bodyParts.push(`<rect x="${pillMargin}" y="${height - ctaHeight - 2}" width="${width - 2 * pillMargin}" height="${ctaHeight}" rx="${ctaHeight / 2}" fill="${frame.color}" />`);
   } else if (frame.style === "split") {
-    body += `<rect x="0" y="0" width="${width}" height="${topHeaderHeight}" rx="0" fill="${frame.color}" />`;
-    body += `<rect x="0" y="${height - ctaHeight}" width="${width}" height="${ctaHeight}" rx="0" fill="${frame.color}" />`;
+    bodyParts.push(`<rect x="0" y="0" width="${width}" height="${topHeaderHeight}" rx="0" fill="${frame.color}" />`);
+    bodyParts.push(`<rect x="0" y="${height - ctaHeight}" width="${width}" height="${ctaHeight}" rx="0" fill="${frame.color}" />`);
   }
 
   if (!colors.transparentBackground) {
-    body += `<rect x="${border}" y="${border + topHeaderHeight}" width="${core}" height="${core}" fill="${colors.background}" />`;
+    bodyParts.push(`<rect x="${border}" y="${border + topHeaderHeight}" width="${core}" height="${core}" fill="${colors.background}" />`);
   }
 
   for (let row = 0; row < matrix.size; row++) {
@@ -190,7 +204,13 @@ function renderStyledQrSvgUnsafe(payload: string, design: DesignConfig): StyledQ
       if (!matrix.isDark(row, col) || matrix.isFinderRegion(row, col)) continue;
       const x = qrOffset + col * CELL;
       const y = qrYOffset + row * CELL;
-      body += moduleShape(x, y, pattern.dotStyle, fill);
+
+      // Functional module protection: timing patterns, alignment patterns, format information,
+      // version information, and dark module must remain solid standard squares so custom
+      // dot styles (dots, micro-dots, rounded) do not damage scanning reliability.
+      const isFunctional = matrix.isReserved(row, col);
+      const dotStyle = isFunctional ? "square" : pattern.dotStyle;
+      bodyParts.push(moduleShape(x, y, dotStyle, fill));
     }
   }
 
@@ -205,13 +225,15 @@ function renderStyledQrSvgUnsafe(payload: string, design: DesignConfig): StyledQ
     const outerSize = 7 * CELL;
     const innerSize = 3 * CELL;
     const innerOffset = 2 * CELL;
-    body += eyeOuterShape(x, y, outerSize, eyes.cornerSquareStyle, eyes.cornerSquareColor);
-    body += eyeInnerShape(
-      x + innerOffset,
-      y + innerOffset,
-      innerSize,
-      eyes.cornerDotStyle,
-      eyes.cornerDotColor,
+    bodyParts.push(eyeOuterShape(x, y, outerSize, eyes.cornerSquareStyle, eyes.cornerSquareColor));
+    bodyParts.push(
+      eyeInnerShape(
+        x + innerOffset,
+        y + innerOffset,
+        innerSize,
+        eyes.cornerDotStyle,
+        eyes.cornerDotColor,
+      ),
     );
   }
 
@@ -225,12 +247,11 @@ function renderStyledQrSvgUnsafe(payload: string, design: DesignConfig): StyledQ
     const logoY = qrYOffset + (qrSize - logoSize) / 2;
 
     if (logo.whiteMargin) {
-      // 50% reduced white margin per Requirement C (reduced from 0.15 to 0.075)
       const pad = logoSize * 0.075;
       const bg = colors.transparentBackground ? "#ffffff" : colors.background;
-      body += `<rect x="${logoX - pad}" y="${logoY - pad}" width="${logoSize + 2 * pad}" height="${logoSize + 2 * pad}" rx="${(logoSize + 2 * pad) * 0.15}" fill="${bg}" />`;
+      bodyParts.push(`<rect x="${logoX - pad}" y="${logoY - pad}" width="${logoSize + 2 * pad}" height="${logoSize + 2 * pad}" rx="${(logoSize + 2 * pad) * 0.15}" fill="${bg}" />`);
     }
-    body += `<image x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" href="${logo.assetUrl}" xlink:href="${logo.assetUrl}" preserveAspectRatio="xMidYMid slice" />`;
+    bodyParts.push(`<image x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" href="${logo.assetUrl}" xlink:href="${logo.assetUrl}" preserveAspectRatio="xMidYMid slice" />`);
   }
 
   if (frame.style && frame.ctaText) {
@@ -238,25 +259,31 @@ function renderStyledQrSvgUnsafe(payload: string, design: DesignConfig): StyledQ
     if (frame.style === "badge") {
       const badgeWidth = Math.min(width * 0.85, 160);
       const badgeX = (width - badgeWidth) / 2;
-      body += `<rect x="${badgeX}" y="${barY}" width="${badgeWidth}" height="${ctaHeight}" rx="${ctaHeight / 2}" fill="${frame.color}" />`;
+      bodyParts.push(`<rect x="${badgeX}" y="${barY}" width="${badgeWidth}" height="${ctaHeight}" rx="${ctaHeight / 2}" fill="${frame.color}" />`);
     }
     const textY = frame.style === "poster" ? barY + ctaHeight / 2 - 2 : barY + ctaHeight / 2;
     const fontFamily = frame.ctaFont || "sans-serif";
-    body += `<text x="${width / 2}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-family="${escapeXml(fontFamily)}" font-size="${CELL * 1.8}" font-weight="bold" fill="#ffffff">${escapeXml(frame.ctaText)}</text>`;
+    bodyParts.push(`<text x="${width / 2}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-family="${escapeXml(fontFamily)}" font-size="${CELL * 1.8}" font-weight="bold" fill="#ffffff">${escapeXml(frame.ctaText)}</text>`);
   }
 
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">` +
     (defs ? `<defs>${defs}</defs>` : "") +
-    body +
+    bodyParts.join("") +
     `</svg>`;
 
-  return { svg, warnings };
+  return {
+    svg,
+    warnings,
+    version: matrix.version,
+    matrixSize: matrix.size,
+  };
 }
 
 export interface StyledQrPngResult {
   dataUrl: string;
   warnings: string[];
+  error?: string;
 }
 
 /**
@@ -264,10 +291,7 @@ export interface StyledQrPngResult {
  * shape/gradient/logo/frame a second time in canvas draw calls — one
  * rendering pipeline, not two. Browser-only (`Image`/`canvas`), so this
  * must be called from a Client Component. The intermediate object URL is
- * revoked immediately after the image loads — a genuinely short-lived,
- * single-use blob, unlike the logo asset (stored as a data URL precisely
- * so it doesn't need this kind of lifecycle tracking across long-lived
- * React state).
+ * revoked immediately after the image loads.
  */
 export async function renderStyledQrPngDataUrl(
   payload: string,
@@ -275,7 +299,11 @@ export async function renderStyledQrPngDataUrl(
   targetWidth = 512,
   qrType?: QRType,
 ): Promise<StyledQrPngResult> {
-  const { svg, warnings } = await renderStyledQrSvg(payload, design, qrType);
+  const { svg, warnings, error } = await renderStyledQrSvg(payload, design, qrType);
+
+  if (error || !svg) {
+    return { dataUrl: "", warnings, error };
+  }
 
   const svgWidth = Number(svg.match(/\swidth="([\d.]+)"/)?.[1] ?? targetWidth);
   const svgHeight = Number(svg.match(/\sheight="([\d.]+)"/)?.[1] ?? targetWidth);
@@ -289,6 +317,7 @@ export async function renderStyledQrPngDataUrl(
     canvas.height = targetHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas 2D context unavailable");
+    ctx.imageSmoothingEnabled = false;
     ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
     return { dataUrl: canvas.toDataURL("image/png"), warnings };
   } finally {

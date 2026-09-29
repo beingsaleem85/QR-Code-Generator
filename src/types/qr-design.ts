@@ -1,9 +1,14 @@
+export type QRVersionOption = "auto" | 10 | 25 | 40;
+export type QRErrorCorrectionLevel = "L" | "M" | "Q" | "H";
+
 /**
  * App-layer shape of `qr_codes.design_config` (stored as JSONB). Real
  * rendering/validation lands in Module 3.3 — this module only fixes the
  * shape so component props have something concrete to reference.
  */
 export interface DesignConfig {
+  version?: QRVersionOption;
+  errorCorrectionLevel?: QRErrorCorrectionLevel;
   frame: {
     style: string | null;
     ctaText: string | null;
@@ -33,6 +38,7 @@ export interface DesignConfig {
 }
 
 export const DEFAULT_DESIGN_CONFIG: DesignConfig = {
+  version: "auto",
   frame: { style: null, ctaText: null, ctaFont: null, color: "#000000" },
   pattern: { dotStyle: "square" },
   eyes: {

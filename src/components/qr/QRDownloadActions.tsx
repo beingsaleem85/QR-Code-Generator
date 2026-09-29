@@ -94,7 +94,10 @@ export function QRDownloadActions({
     if (!payload) return;
     setDownloading("png");
     try {
-      const { dataUrl } = await renderStyledQrPngDataUrl(payload, design, pngSize, qrType);
+      const { dataUrl, error } = await renderStyledQrPngDataUrl(payload, design, pngSize, qrType);
+      if (error || !dataUrl) {
+        return;
+      }
       triggerDownload(dataUrl, `${filename}-qr.png`);
     } finally {
       setDownloading(null);
@@ -113,7 +116,10 @@ export function QRDownloadActions({
     if (!payload) return;
     setDownloading("svg");
     try {
-      const { svg } = await renderStyledQrSvg(payload, design, qrType);
+      const { svg, error } = await renderStyledQrSvg(payload, design, qrType);
+      if (error || !svg) {
+        return;
+      }
       const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
       triggerDownload(url, `${filename}-qr.svg`);
       URL.revokeObjectURL(url);

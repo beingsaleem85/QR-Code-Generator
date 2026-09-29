@@ -62,7 +62,7 @@ export function QRDesignGallery({ value, onChange }: QRDesignGalleryProps) {
   });
 
   const handleSelectPreset = (preset: DesignPreset) => {
-    // Retain existing logo and any existing CTA text if frame style is not changing to none
+    // Retain existing logo, QR version, error correction level, and any existing CTA text if frame style is not changing to none
     onChange({
       ...preset.design,
       frame: {
@@ -70,6 +70,8 @@ export function QRDesignGallery({ value, onChange }: QRDesignGalleryProps) {
         ctaText: preset.design.frame.style ? (value.frame.ctaText ?? preset.design.frame.ctaText) : null,
       },
       logo: value.logo,
+      version: value.version,
+      errorCorrectionLevel: value.errorCorrectionLevel,
     });
   };
 

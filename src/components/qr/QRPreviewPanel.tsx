@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Lock, FileText, ExternalLink, Download } from "lucide-react";
 import { Card } from "@/components/ui/Card";
+import { Alert } from "@/components/ui/Alert";
 import { QrPlaceholderGraphic } from "@/components/ui/QrPlaceholderGraphic";
 import { buildQrPayload, resolveEncodedPayload } from "@/lib/qr/render";
 import { renderStyledQrSvg } from "@/lib/qr/styled-svg";
@@ -36,6 +37,9 @@ interface RenderedState {
   payload: string;
   svg: string;
   warnings: string[];
+  error?: string;
+  version?: number;
+  matrixSize?: number;
 }
 
 /** Real, fully-styled QR rendering (Module 3.3) — pattern/eyes/gradient/logo/frame, not just solid colors. */
@@ -73,8 +77,8 @@ export function QRPreviewPanel({
     }
 
     const timeoutId = setTimeout(() => {
-      renderStyledQrSvg(payload, design, qrType).then(({ svg, warnings }) => {
-        setRendered({ payload, svg, warnings });
+      renderStyledQrSvg(payload, design, qrType).then(({ svg, warnings, error, version, matrixSize }) => {
+        setRendered({ payload, svg, warnings, error, version, matrixSize });
       });
     }, RENDER_DEBOUNCE_MS);
 
@@ -82,7 +86,7 @@ export function QRPreviewPanel({
     // design is destructured per-slice so this only re-fires when a slice
     // that actually affects rendering changes, not on every design update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthorized, payload, qrType, design.colors, design.pattern, design.eyes, design.logo, design.frame]);
+  }, [isAuthorized, payload, qrType, design.colors, design.pattern, design.eyes, design.logo, design.frame, design.version, design.errorCorrectionLevel]);
 
   const current = isAuthorized && rendered?.payload === payload ? rendered : null;
 
@@ -170,6 +174,13 @@ export function QRPreviewPanel({
                     </>
                   )}
                 </div>
+              ) : current?.error ? (
+                <div className="flex h-full w-full flex-col items-center justify-center p-3 text-center">
+                  <span className="text-xs font-semibold text-danger">Capacity Exceeded</span>
+                  <p className="mt-1 text-[11px] leading-tight text-muted-foreground">
+                    {current.error}
+                  </p>
+                </div>
               ) : current ? (
                 <div
                   role="img"
@@ -197,6 +208,12 @@ export function QRPreviewPanel({
             <p className="text-center text-xs text-muted-foreground">
               Upgrade to Pro to generate scannable QR code.
             </p>
+          ) : current?.error ? (
+            <div className="w-full text-xs">
+              <Alert variant="error">
+                {current.error}
+              </Alert>
+            </div>
           ) : current && current.warnings.length > 0 ? (
             <ul className="flex flex-col gap-1 text-center text-xs text-warning">
               {current.warnings.map((warning) => (
@@ -204,7 +221,14 @@ export function QRPreviewPanel({
               ))}
             </ul>
           ) : (
-            <p className="text-center text-xs text-muted-foreground">Scan to test.</p>
+            <div className="flex flex-col items-center gap-0.5">
+              <p className="text-center text-xs text-muted-foreground">Scan to test.</p>
+              {current?.matrixSize ? (
+                <span className="text-[11px] text-muted-foreground/80">
+                  {current.matrixSize} × {current.matrixSize} modules
+                </span>
+              ) : null}
+            </div>
           )}
         </>
       ) : (
